@@ -33,6 +33,7 @@ def create_adjacency_lists(csv_file_path):
             node_list.add(target)
 
     node_list = list(node_list)
+
     #here we merge multiple edges
     merged_edges = {}
     for source, dest, weight in edges:
