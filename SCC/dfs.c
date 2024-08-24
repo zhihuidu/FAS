@@ -3,11 +3,12 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <time.h>
 #include <sys/time.h>
 
 #define MAX_NODES 136648
 #define MAX_EDGES 5657719
-#define MAX_CYCLE_LENGTH 3
+#define MAX_CYCLE_LENGTH 100
 
 typedef struct {
     int source;
@@ -231,8 +232,14 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
 
 int main(int argc, char * argv[]) {
     const char* input_filename = "graph.csv";
-    char* output_filename = "removed-edge.txt";
+    //char* output_filename = "removed-edge.txt";
 
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    // Create a filename with the timestamp
+    char output_filename[100];
+    strftime(output_filename, sizeof(output_filename), "removed-edge-%Y%m%d-%H%M%S.txt", t);
     Graph graph;
     printf("read file name=%s, writefile name=%s\n",input_filename,output_filename);
     initialize_graph(&graph);
@@ -305,4 +312,5 @@ int main(int argc, char * argv[]) {
 
     return 0;
 }
+
 
