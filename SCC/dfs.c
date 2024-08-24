@@ -231,7 +231,8 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
 
 
 int main(int argc, char * argv[]) {
-    const char* input_filename = "graph.csv";
+    const char* input_filename = argv[1];
+    //const char* input_filename = "graph.csv";
     //char* output_filename = "removed-edge.txt";
 
     time_t now = time(NULL);
