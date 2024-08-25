@@ -10,7 +10,7 @@
 
 #define MAX_NODES 136648
 #define MAX_EDGES 5657719
-#define MAX_CYCLE_LENGTH 100
+int MAX_CYCLE_LENGTH=100;
 
 typedef struct {
     int source;
@@ -173,10 +173,17 @@ void add_edge(Graph* graph, int source, int target, int weight) {
     graph->edges[edge_index].target = target;
     graph->edges[edge_index].weight = weight;
 
+    int source_index = find_or_add_vertex(graph, source);
+    int target_index = find_or_add_vertex(graph, target);
+    mapped_edges[edge_index].source=source_index;        
+    mapped_edges[edge_index].target=target_index;        
+    mapped_edges[edge_index].weight=weight;        
+    if (verbosity >1){
+             printf("map %d,%d,%d, to %d,%d,%d\n",source,target,weight,source_index,target_index,weight);
+    }
     updated_weights[edge_index] = weight;
 
     // Update out_edge info
-    int source_index = find_or_add_vertex(graph, source);
     add_edge_to_info(&graph->out_edge[source_index], edge_index);
 
     // Update in_edge info
@@ -214,9 +221,9 @@ void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
         add_edge(graph, source, target, weight);
         total+=weight;
     }
-    printf("add all edges to the graph\n");
+    printf("add all edges to the graph\n\n");
 
-    remap_vertex(graph);
+    printf("remap vertices\n\n");
     for (int i = 0; i < graph->num_edges ; i++) {
          int source=mapped_edges[i].source;
          int target=mapped_edges[i].target;
@@ -225,6 +232,7 @@ void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
              printf("map (%d,%d) to edge %d\n",source,target,i);
          }
     }
+    printf("insert edges to hash table\n\n");
     fclose(file);
 }
 
@@ -322,7 +330,10 @@ int main(int argc, char * argv[]) {
     //const char* input_filename = "graph.csv";
     //char* output_filename = "removed-edge.txt";
     if (argc>2) {
-         verbosity=2;
+         MAX_CYCLE_LENGTH=atoi(argv[2]);
+         if (argc >3) {
+            verbosity=2;
+         }
     } 
     struct timeval start, end;
     long seconds, useconds;
@@ -341,7 +352,7 @@ int main(int argc, char * argv[]) {
 
     printf("initialize graph\n");
     initialize_graph(&graph);
-    printf("create hash table  graph\n");
+    printf("create hash table\n");
     HashTable* table =create_table();
     printf("read data\n");
     read_graph_from_csv(input_filename, &graph,table);
@@ -405,7 +416,7 @@ int main(int argc, char * argv[]) {
     }
 
     fclose(output_file);
-    printf("Removed %d edges with weigt sum %d , percentage %f ,have been successfully written to %s\n", removed_edge_num,removed_edge_weight, removed_edge_weight*1.0/total*100, output_filename);
+    printf("Removed %d edges with weigt sum %d , gained percentage %f, have been successfully written to %s\n", removed_edge_num,removed_edge_weight, (total-removed_edge_weight)*1.0/total*100, output_filename);
 
     // Free dynamically allocated memory
     for (int i = 0; i < graph.num_nodes; i++) {
