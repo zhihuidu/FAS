@@ -235,6 +235,10 @@ int main(int argc, char * argv[]) {
     //const char* input_filename = "graph.csv";
     //char* output_filename = "removed-edge.txt";
 
+    struct timeval start, end;
+    long seconds, useconds;
+    double elapsed;
+
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
 
@@ -243,15 +247,21 @@ int main(int argc, char * argv[]) {
     strftime(output_filename, sizeof(output_filename), "removed-edge-%Y%m%d-%H%M%S.txt", t);
     Graph graph;
     printf("read file name=%s, writefile name=%s\n",input_filename,output_filename);
+
+    gettimeofday(&start, NULL);
+
     initialize_graph(&graph);
     printf("read data\n");
     read_graph_from_csv(input_filename, &graph);
     printf("finish read data\n");
 
-    struct timeval start, end;
-    long seconds, useconds;
-    double elapsed;
+    gettimeofday(&end, NULL);
+    seconds  = end.tv_sec  - start.tv_sec;
+    useconds = end.tv_usec - start.tv_usec;
+    elapsed = seconds + useconds/1000000.0;
+    printf("Initial graph and read data taken: %f seconds\n\n", elapsed);
 
+    exit(0);
     gettimeofday(&start, NULL);
 
     // Find cycles and update weights
@@ -264,11 +274,8 @@ int main(int argc, char * argv[]) {
     }
 
     gettimeofday(&end, NULL);
-
-    
     seconds  = end.tv_sec  - start.tv_sec;
     useconds = end.tv_usec - start.tv_usec;
-    
     elapsed = seconds + useconds/1000000.0;
     printf("Find %d Cycles with the largest length %d, Time taken: %f seconds\n\n",number_cycles, MAX_CYCLE_LENGTH, elapsed);
 
@@ -282,11 +289,8 @@ int main(int argc, char * argv[]) {
     }
 
     gettimeofday(&end, NULL);
-
-    
     seconds  = end.tv_sec  - start.tv_sec;
     useconds = end.tv_usec - start.tv_usec;
-    
     elapsed = seconds + useconds/1000000.0;
     printf("Mark %d removed edges in Cycles with the largest length %d, Time taken: %f seconds\n\n",number_edges, MAX_CYCLE_LENGTH, elapsed);
     // Output removed edges to a file
