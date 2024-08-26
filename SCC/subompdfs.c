@@ -346,7 +346,7 @@ int main(int argc, char * argv[]) {
     struct tm *t = localtime(&now);
 
     // Create a filename with the timestamp
-    char * output_filename="tmp-omp-removed-edges.csv");
+    char * output_filename="tmp-omp-removed-edges.csv";
     char loss_filename[100];
     strftime(loss_filename, sizeof(loss_filename), "edge-loss-%Y%m%d-%H%M%S.txt", t);
     snprintf(loss_filename + strlen(loss_filename), sizeof(loss_filename) - strlen(loss_filename), "-Min%d-Max%d.txt", MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH);

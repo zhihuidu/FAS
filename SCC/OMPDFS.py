@@ -4,6 +4,7 @@ from networkx.algorithms.cycles import simple_cycles
 import gurobipy as gp
 from gurobipy import GRB
 import sys
+import os
 from datetime import datetime
 import time
 import csv
@@ -97,23 +98,10 @@ def read_ID_Mapping(file_path):
     data_dict = {key: value for key, value in data_table}
     return data_dict
 
-num=0
-def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,edge_flag):
-    oldnum=num
+def read_removed_edges(file_path,edge_flag):
     removed_weight=0
-
-    # Create the subgraph
-    G_sub = G.subgraph(nodes).copy()
-
-    with open("tmp-omp-file.csv", 'w') as f:
-        for u, v, data in G_sub.edges(data=True):
-        print(f"({u}, {v}) with weight {data['weight']}")
-            f.write(f"{u},{v},{data['weight']}\n")
-    commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen}"
-    os.system(commandline)
-
-    with open("tmp-omp-removed-edges.csv",mode='r') as f:
-        csv_reader = csv.reader(file)
+    with open(file_path,mode='r') as f:
+        csv_reader = csv.reader(f)
         for row in csv_reader:
             source = int(row[0])
             dest = int(row[1])
@@ -121,6 +109,31 @@ def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,edge_flag):
             if edge_flag[(source,dest)]==1:
                 edge_flag[(source,dest)]=0
                 removed_weight+=weight
+    return removed_weight
+
+num=0
+def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,edge_flag):
+    removed_weight=0
+
+    # Create the subgraph
+    G_sub = G.subgraph(nodes).copy()
+
+    with open("tmp-omp-file.csv", 'w') as f:
+        for u, v, data in G_sub.edges(data=True):
+            f.write(f"{u},{v},{data['weight']}\n")
+    commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen}"
+    os.system(commandline)
+
+    with open("tmp-omp-removed-edges.csv",mode='r') as f:
+        csv_reader = csv.reader(f)
+        for row in csv_reader:
+            source = int(row[0])
+            dest = int(row[1])
+            weight = int(row[2])  
+            if edge_flag[(source,dest)]==1:
+                edge_flag[(source,dest)]=0
+                removed_weight+=weight
+                num+=1
     return removed_weight 
 
 def sccdfs_remove_cycle_edges(nodes,edge_weights,out_adj,edge_flag):
@@ -275,7 +288,8 @@ def process_graph(file_path):
 
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
-    removed_weight=again_dfs_remove_cycle_edges(node_list, edge_weights,out_edges,edge_flag )
+
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
 
     removednum=0
     for u,v in edge_flag:
@@ -287,6 +301,8 @@ def process_graph(file_path):
 
 
 
+
+    newsize=3000
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG.")
         print(f"strongly connected components")
@@ -298,16 +314,22 @@ def process_graph(file_path):
                  continue
             print(f"handle the {numcomponent}th component with size {len(component)}")
             subnum=0
-            while len(component) >9000:
+            oldnum=num
+            while len(component) >newsize:
                    print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    subnum += 1
-                   smallcom=random.sample(component, 9000)
+                   smallcom=random.sample(component, newsize)
                    component.difference_update(smallcom)
-                   #smallG=build_small_graph(shG,smallcom,edge_flag)
-                   removed_weight1=sccdfs_remove_cycle_edges(list(smallcom), edge_weights,out_edges,edge_flag )
+                   removed_weight1=ompdfs_remove_cycle_edges(smallcom, G, 8, 5,edge_flag )
                    removed_weight+=removed_weight1
+                   addnum=max(num-oldnum,1)
+                   if addnum < 100:
+                        newsize=newsize*2
+                   #newsize=min(len(component),newsize)
+                   print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
 
-            removed_weight1 = sccdfs_remove_cycle_edges(list(component), edge_weights,out_edges,edge_flag )
+
+            removed_weight1 = ompdfs_remove_cycle_edges(component, G,10,2,edge_flag )
             removed_weight+=removed_weight1
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
             numcomponent+=1
