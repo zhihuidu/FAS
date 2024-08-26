@@ -112,8 +112,43 @@ def read_removed_edges(file_path,edge_flag):
     return removed_weight
 
 num=0
+
+
+
+def solve_ip_scc(G,edge_flag):
+    global num
+    removed_weight=0
+    model = gp.Model("min_feedback_arc_set")
+    model.setParam('OutputFlag', 0)  # Silent mode
+
+    # Create binary variables for each edge
+    edge_vars = {}
+    for u, v, data in G.edges(data=True):
+        edge_vars[(u, v)] = model.addVar(vtype=GRB.BINARY, obj=data['weight'])
+
+    cycles = nx.simple_cycles(G)
+    for cycle in cycles:
+        #print(f"the cycle is {cycle}")
+        cycle_edges = [(cycle[i], cycle[(i+1) % len(cycle)]) for i in range(len(cycle))]
+        model.addConstr(gp.quicksum(edge_vars[edge] for edge in cycle_edges) >= 1)
+
+    # Optimize the model
+    model.optimize()
+
+    # Get the edges to be removed
+    for edge, var in edge_vars.items():
+            if var.x > 0.5:
+               if edge_flag[(edge[0],edge[1])]==1:
+                    removed_weight+=G[edge[0]][edge[1]]['weight']
+                    num+=1
+    return removed_weight
+
+
+
+
 def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,edge_flag):
     removed_weight=0
+    global num
 
     # Create the subgraph
     G_sub = G.subgraph(nodes).copy()
@@ -315,6 +350,14 @@ def process_graph(file_path):
             print(f"handle the {numcomponent}th component with size {len(component)}")
             subnum=0
             oldnum=num
+            if len(component)<200:
+                 G_sub = G.subgraph(component).copy()
+                 removed_weight1= solve_ip_scc(G_sub,edge_flag)
+                 removed_weight+=removed_weight1
+                 print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+                 continue
+
+
             while len(component) >newsize:
                    print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    subnum += 1

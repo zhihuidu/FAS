@@ -351,17 +351,15 @@ int main(int argc, char * argv[]) {
     strftime(loss_filename, sizeof(loss_filename), "edge-loss-%Y%m%d-%H%M%S.txt", t);
     snprintf(loss_filename + strlen(loss_filename), sizeof(loss_filename) - strlen(loss_filename), "-Min%d-Max%d.txt", MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH);
     Graph graph;
-    printf("read file name=%s, writefile name=%s, loss weight file=%s\n",input_filename,output_filename,loss_filename);
+    printf("-------------------------------------------------------------\n");
+    printf("OMP Subroutine started");
+    printf("read file name=%s, writefile name=%s\n",input_filename,output_filename);
 
     gettimeofday(&start, NULL);
 
-    printf("initialize graph\n");
     initialize_graph(&graph);
-    printf("create hash table\n");
     HashTable* table =create_table();
-    printf("read data\n");
     read_graph_from_csv(input_filename, &graph,table);
-    printf("finish read data\n");
 
     gettimeofday(&end, NULL);
     seconds  = end.tv_sec  - start.tv_sec;
@@ -383,7 +381,7 @@ int main(int argc, char * argv[]) {
         find_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX);
 
         if (verbosity >1 || i % 1000 ==0){
-                printf("Thread %4d of %4d, find %10d(th) cycle's (%5d=<length<=%5d)\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH);
+                printf("Thread %4d of %4d, find %8d(th) cycle's (%5d=<length<=%5d)\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH);
         }
 
     }
@@ -415,11 +413,6 @@ int main(int argc, char * argv[]) {
         printf("Error: Cannot open file %s for writing\n", output_filename);
         exit(1);
     }
-    FILE* output_loss_file = fopen(loss_filename, "w");
-    if (output_loss_file == NULL) {
-        printf("Error: Cannot open file %s for writing\n", loss_filename);
-        exit(1);
-    }
     int removed_edge_num=0;
     int removed_edge_weight=0;
     for (int i = 0; i < graph.num_edges; i++) {
@@ -428,12 +421,10 @@ int main(int argc, char * argv[]) {
             removed_edge_num+=1;
             removed_edge_weight+=graph.edges[i].weight;
         }
-        fprintf(output_loss_file, "%ld,%ld,%ld\n", graph.edges[i].source, graph.edges[i].target,shared_weights[i]);
     }
-
     fclose(output_file);
-    fclose(output_loss_file);
-    printf("Removed %d edges with weight sum %d , gained percentage %f, have been successfully written to %s\n", removed_edge_num,removed_edge_weight, (total_weight-removed_edge_weight)*1.0/total_weight*100, output_filename);
+    printf("OMP subprogram Removed %d edges with weight sum %d\n", removed_edge_num,removed_edge_weight);
+    printf("-------------------------------------------------------------\n");
 
     // Free dynamically allocated memory
     for (int i = 0; i < graph.num_nodes; i++) {
