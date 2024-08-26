@@ -10,13 +10,20 @@
 
 #define MAX_NODES 136648
 #define MAX_EDGES 5657719
-int MAX_CYCLE_LENGTH=100;
+int MAX_CYCLE_LENGTH=3;
+int MIN_CYCLE_LENGTH=2;
 
 typedef struct {
     int source;
     int target;
     int weight;
 } Edge;
+
+typedef struct {
+    long int source;
+    long int target;
+    int weight;
+} LongEdge;
 
 typedef struct {
     int* edges;  // Dynamic array of edge indices
@@ -27,18 +34,18 @@ typedef struct {
 typedef struct {
     int num_nodes;
     int num_edges;
-    int vertices[MAX_NODES];  // List of vertices
-    Edge edges[MAX_EDGES];    // Static array of all edges
+    long int vertices[MAX_NODES];  // List of vertices
+    LongEdge edges[MAX_EDGES];    // Static array of all edges
 
     EdgeInfo out_edge[MAX_NODES];  // Outgoing edges information
     //EdgeInfo in_edge[MAX_NODES];   // Incoming edges information
 } Graph;
 
-int updated_weights[MAX_EDGES];
-int total=0;
+long int loss_weights[MAX_EDGES];     //lossed weight compared with removed the smallest weight
+int total_weight=0;              // total weight of the graph
 Edge mapped_edges[MAX_EDGES];    // Static array of all edges but vertices are mapped to 0-MAX_NODES-1
 EdgeInfo mapped_out_edge[MAX_NODES];  // Outgoing edges information
-bool removed_edges[MAX_EDGES];
+bool removed_edges[MAX_EDGES];       //if the edge has been removed
 
 int verbosity=0;
 
@@ -80,6 +87,10 @@ void insert(HashTable* table, int u, int v, int edge_number) {
 
     // Create a new entry for the pair
     HashEntry* new_entry = (HashEntry*)malloc(sizeof(HashEntry));
+    if (new_entry ==NULL) {
+        printf("cannot allocate memory\n");
+        exit(0);
+    }
     new_entry->pair.u = u;
     new_entry->pair.v = v;
     new_entry->edge_number = edge_number;
@@ -135,19 +146,16 @@ void initialize_graph(Graph* graph) {
         graph->out_edge[i].count = 0;
         graph->out_edge[i].capacity = 0;
 
-        //graph->in_edge[i].edges = NULL;
-        //graph->in_edge[i].count = 0;
-        //graph->in_edge[i].capacity = 0;
     }
 
     for (int i = 0; i < MAX_EDGES; i++) {
-        //updated_weights[i] = 0;
         removed_edges[i] = false;
+        loss_weights[i] = 0;
     }
 }
 
 // Function to find or add a vertex
-int find_or_add_vertex(Graph* graph, int vertex) {
+int find_or_add_vertex(Graph* graph, long int vertex) {
     for (int i = 0; i < graph->num_nodes; i++) {
         if (graph->vertices[i] == vertex) {
             return i;
@@ -162,12 +170,16 @@ void add_edge_to_info(EdgeInfo* edge_info, int edge_index) {
     if (edge_info->count == edge_info->capacity) {
         edge_info->capacity = edge_info->capacity == 0 ? 2 : edge_info->capacity * 2;
         edge_info->edges = realloc(edge_info->edges, edge_info->capacity * sizeof(int));
+        if (edge_info->edges ==NULL) {
+              printf("cannot allocate memory\n");
+              exit(0);
+        }
     }
     edge_info->edges[edge_info->count++] = edge_index;
 }
 
 // Function to add an edge to the graph
-void add_edge(Graph* graph, int source, int target, int weight) {
+void add_edge(Graph* graph, long int source, long int target, int weight) {
     int edge_index = graph->num_edges++;
     graph->edges[edge_index].source = source;
     graph->edges[edge_index].target = target;
@@ -178,35 +190,15 @@ void add_edge(Graph* graph, int source, int target, int weight) {
     mapped_edges[edge_index].source=source_index;        
     mapped_edges[edge_index].target=target_index;        
     mapped_edges[edge_index].weight=weight;        
-    if (verbosity >1){
-             printf("map %20d,%20d,%12d, to %10d,%10d,%12d\n",source,target,weight,source_index,target_index,weight);
+    if (verbosity >5){
+             printf("map %20ld,%20ld,%12d, to %10d,%10d,%12d\n",source,target,weight,source_index,target_index,weight);
     }
-    updated_weights[edge_index] = weight;
 
     // Update out_edge info
     add_edge_to_info(&graph->out_edge[source_index], edge_index);
 
-    // Update in_edge info
-    //int target_index = find_or_add_vertex(graph, target);
-    //add_edge_to_info(&graph->in_edge[target_index], edge_index);
 }
 
-// Function to remmap  an edge using relabelled vertices
-void remap_vertex(Graph* graph) {
-    for (int i = 0; i < graph->num_edges ; i++) {
-         int source=graph->edges[i].source;
-         int target=graph->edges[i].target;
-         int weight=graph->edges[i].weight;
-         int source_index = find_or_add_vertex(graph, graph->edges[i].source);
-         int target_index = find_or_add_vertex(graph, graph->edges[i].target);
-         mapped_edges[i].source=source_index;        
-         mapped_edges[i].target=target_index;        
-         mapped_edges[i].weight=weight;        
-         if (verbosity >1){
-             printf("map %20d,%20d,%12d, to %10d,%10d,%12d\n",source,target,weight,source_index,target_index,weight);
-         }
-    }
-}
 // Function to read the graph from a CSV file
 void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
     FILE* file = fopen(filename, "r");
@@ -215,20 +207,22 @@ void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
         exit(1);
     }
 
-    int source, target, weight;
-    while (fscanf(file, "%d,%d,%d\n", &source, &target, &weight) != EOF) {
-        //printf("source=%d,target=%d,weight=%d\n",source,target,weight);
+    long int source, target;
+    int weight;
+    while (fscanf(file, "%ld,%ld,%d\n", &source, &target, &weight) != EOF) {
+        if (verbosity >10) {
+            printf("source=%ld,target=%ld,weight=%d\n",source,target,weight);
+        }
         add_edge(graph, source, target, weight);
-        total+=weight;
+        total_weight+=weight;
     }
-    printf("add all edges to the graph\n\n");
+    printf("add all edges to the graph, total weight is %d\n\n",total_weight);
 
-    printf("remap vertices\n\n");
     for (int i = 0; i < graph->num_edges ; i++) {
          int source=mapped_edges[i].source;
          int target=mapped_edges[i].target;
          insert(table,source,target,i);
-         if (verbosity >1){
+         if (verbosity >3){
              printf("map (%20d,%20d) to edge %d\n",source,target,i);
          }
     }
@@ -252,31 +246,32 @@ void find_cycles(Graph* graph, int start, int current, int length, int* path, bo
         int edge_index = out_edges->edges[i];
         Edge* edge = &mapped_edges[edge_index];
         int target_index = edge->target;
-        if (removed_edges[edge_index] == true) {
+        if (removed_edges[edge_index] == true || target_index <start || (visited[target_index]== true && target_index != start) ) {
             continue;
         } 
         int weight=edge->weight;
         if (weight<min_weight) {
               min_weight=weight;
         }
-        if (edge->target == start && length > 1) {
+        if (edge->target == start && length >= MIN_CYCLE_LENGTH) {
             // Cycle detected
             num_cycle[0]+=1;
-            printf("Thread %d, find %d(th) cycle starting from vertex %d with length %d\n",thread_id,num_cycle[0], start,length);
-
-            // Update the weights in the updated_weights array
+            if (verbosity >3) {
+                printf("Thread %4d, find %10d(th) cycle starting from vertex %10d with length %10d through %d\n",thread_id,num_cycle[0], start,length,target_index);
+            }
+            // Update the weights in the loss_weights array
             for (int j = 0; j < length - 1; j++) {
                 int u = path[j];
                 int v = path[j + 1];
                 int idx = get_edge_number(table,u,v);
-                atomic_fetch_sub(&updated_weights[idx],min_weight);
-                if (verbosity >1){
-                    printf("Thread %4d, update %10d(th) cycle's (length=%5d) edge weight (%10d,%10d,%12d) to (%10d,%10d,%21d) \n",thread_id,num_cycle[0],length, u,v,graph->edges[idx].weight,u,v,updated_weights[idx]);
+                atomic_fetch_sub(&loss_weights[idx],min_weight);
+                if (verbosity >4){
+                    printf("Thread %4d, update %10d(th) cycle's (length=%5d) edge weight (%10d,%10d,%12d) to (%10d,%10d,%21d) \n",thread_id,num_cycle[0],length, u,v,graph->edges[idx].weight,u,v,loss_weights[idx]);
                 }
             }
-            updated_weights[edge_index] -= min_weight;
-            if (verbosity >1){
-                printf("Thread %4d, update %10d(th) cycle's (length=%5d) edge weight (%10d,%10d,%12d) to (%10d,%10d,%12d) \n",thread_id,num_cycle[0], length, current,target_index,graph->edges[edge_index].weight,current, target_index, updated_weights[edge_index]);
+            atomic_fetch_sub(&loss_weights[edge_index],min_weight);
+            if (verbosity >3){
+                printf("Thread %4d, update %10d(th) cycle's (length=%5d) edge weight (%10d,%10d,%12d) to (%10d,%10d,%12d) \n",thread_id,num_cycle[0], length, current,target_index,graph->edges[edge_index].weight,current, target_index, loss_weights[edge_index]);
             }
         } else if ( !visited[edge->target] && edge->target > start) {
             find_cycles(graph, start, edge->target, length + 1, path, visited,num_cycle,table,min_weight);
@@ -287,7 +282,7 @@ void find_cycles(Graph* graph, int start, int current, int length, int* path, bo
 }
 
 // Function to mark removed edges
-void mark_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,int min_updated_weight,int min_updated_edge_index) {
+void mark_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_updated_weight,int min_updated_edge_index) {
     if (length > MAX_CYCLE_LENGTH) return;
 
     path[length - 1] = current;
@@ -301,21 +296,22 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
         int edge_index = out_edges->edges[i];
         Edge* edge = &mapped_edges[edge_index];
         int target_index = edge->target;
-        if (removed_edges[edge_index] == true) {
+        if (removed_edges[edge_index] == true || target_index <start || (visited[target_index]== true && target_index != start) ) {
             continue;
         } 
-        int weight=edge->weight;
-        if (weight<min_updated_weight) {
-              min_updated_weight=weight;
+        long int longweight=edge->weight;
+        if (longweight+loss_weights[edge_index]<min_updated_weight) {
+              min_updated_weight=longweight+loss_weights[edge_index];
               min_updated_edge_index=edge_index;
         }
 
-        if (edge->target == start && length > 1) {
+        if (edge->target == start && length >=MIN_CYCLE_LENGTH) {
             // Cycle detected
-
             atomic_store(& removed_edges[min_updated_edge_index], true);
             num_edges[0]+=1;
-            printf("Thread %4d, removed %10d(th) edge (%20d,%20d,%12d)\n",thread_id,num_edges[0], graph->edges[min_updated_edge_index].source,graph->edges[min_updated_edge_index].target,graph->edges[min_updated_edge_index].weight);
+            if (verbosity >2){
+                printf("Thread %4d, removed %10d(th) edge (%20ld,%20ld,%12d)\n",thread_id,num_edges[0], graph->edges[min_updated_edge_index].source,graph->edges[min_updated_edge_index].target,graph->edges[min_updated_edge_index].weight);
+            }
         } else if (!visited[target_index] && edge->target > start) {
             mark_removed_edges(graph, start, edge->target, length + 1, path, visited, num_edges,table,min_updated_weight,min_updated_edge_index);
         }
@@ -327,12 +323,13 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
 
 int main(int argc, char * argv[]) {
     const char* input_filename = argv[1];
-    //const char* input_filename = "graph.csv";
-    //char* output_filename = "removed-edge.txt";
     if (argc>2) {
          MAX_CYCLE_LENGTH=atoi(argv[2]);
          if (argc >3) {
-            verbosity=2;
+            verbosity=atoi(argv[3]);
+         }
+         if (argc >4) {
+            MIN_CYCLE_LENGTH=atoi(argv[4]);
          }
     } 
     struct timeval start, end;
@@ -345,8 +342,12 @@ int main(int argc, char * argv[]) {
     // Create a filename with the timestamp
     char output_filename[100];
     strftime(output_filename, sizeof(output_filename), "removed-edge-%Y%m%d-%H%M%S.txt", t);
+    char loss_filename[100];
+    strftime(loss_filename, sizeof(loss_filename), "edge-loss-%Y%m%d-%H%M%S.txt", t);
+    snprintf(loss_filename + strlen(loss_filename), sizeof(loss_filename) - strlen(loss_filename), "-Min%d-Max%d.txt", MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH);
+    snprintf(output_filename + strlen(output_filename), sizeof(output_filename) - strlen(output_filename), "-Min%d-Max%d.txt", MIN_CYCLE_LENGTH, MAX_CYCLE_LENGTH);
     Graph graph;
-    printf("read file name=%s, writefile name=%s\n",input_filename,output_filename);
+    printf("read file name=%s, writefile name=%s, loss weight file=%s\n",input_filename,output_filename,loss_filename);
 
     gettimeofday(&start, NULL);
 
@@ -370,11 +371,16 @@ int main(int argc, char * argv[]) {
     int number_cycles=0;
     #pragma omp parallel for reduction(+:number_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
-        bool visited[MAX_NODES] = {0};
+        bool visited[MAX_NODES] = {false};
         int path[MAX_CYCLE_LENGTH];
         int num_threads=omp_get_num_threads();
-        printf("Totally %4d threads are executing the loop\n",num_threads);
+        int thread_id=omp_get_thread_num();
+
         find_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX);
+
+        if (verbosity >1 && i % 1000 ==0){
+                printf("Thread %4d of %4d, find %10d(th) cycle's (%5d=<length<=%5d)\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH);
+        }
 
     }
 
@@ -389,7 +395,7 @@ int main(int argc, char * argv[]) {
     int number_edges=0;
     #pragma omp parallel for reduction(+:number_edges) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
-        bool visited[MAX_NODES] = {0};
+        bool visited[MAX_NODES] = {false};
         int path[MAX_CYCLE_LENGTH];
         mark_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
     }
@@ -405,18 +411,25 @@ int main(int argc, char * argv[]) {
         printf("Error: Cannot open file %s for writing\n", output_filename);
         exit(1);
     }
+    FILE* output_loss_file = fopen(loss_filename, "w");
+    if (output_loss_file == NULL) {
+        printf("Error: Cannot open file %s for writing\n", loss_filename);
+        exit(1);
+    }
     int removed_edge_num=0;
     int removed_edge_weight=0;
     for (int i = 0; i < graph.num_edges; i++) {
         if (removed_edges[i] == 1) {
-            fprintf(output_file, "%d,%d,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
+            fprintf(output_file, "%ld,%ld,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
             removed_edge_num+=1;
             removed_edge_weight+=graph.edges[i].weight;
         }
+        fprintf(output_loss_file, "%ld,%ld,%ld\n", graph.edges[i].source, graph.edges[i].target,loss_weights[i]);
     }
 
     fclose(output_file);
-    printf("Removed %d edges with weigt sum %d , gained percentage %f, have been successfully written to %s\n", removed_edge_num,removed_edge_weight, (total-removed_edge_weight)*1.0/total*100, output_filename);
+    fclose(output_loss_file);
+    printf("Removed %d edges with weight sum %d , gained percentage %f, have been successfully written to %s\n", removed_edge_num,removed_edge_weight, (total_weight-removed_edge_weight)*1.0/total_weight*100, output_filename);
 
     // Free dynamically allocated memory
     for (int i = 0; i < graph.num_nodes; i++) {
