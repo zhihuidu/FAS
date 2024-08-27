@@ -509,7 +509,7 @@ int main(int argc, char * argv[]) {
     #pragma omp parallel for reduction(+:number_edges,cur_large_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
-        int path[MAX_CYCLE_LENGTH];
+        int path[MAX_NODES];
         mark_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
         mark_long_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&cur_large_cycles);
     }
