@@ -483,7 +483,7 @@ int main(int argc, char * argv[]) {
     #pragma omp parallel for reduction(+:number_cycles,cur_large_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
-        int path[MAX_CYCLE_LENGTH];
+        int path[MAX_NODES];
         int num_threads=omp_get_num_threads();
         int thread_id=omp_get_thread_num();
 
