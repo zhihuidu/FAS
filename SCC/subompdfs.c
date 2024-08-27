@@ -3,16 +3,17 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
-#include <time.h>
 #include <omp.h>
 #include <stdatomic.h>
 #include <sys/time.h>
+#include <time.h>
 
 #define MAX_NODES 136648
 #define MAX_EDGES 5657719
 
 int MAX_CYCLE_LENGTH=3;
 int MIN_CYCLE_LENGTH=2;
+int MAX_LONG_CYCLE=100;
 
 typedef struct {
     int source;
@@ -282,6 +283,60 @@ void find_cycles(Graph* graph, int start, int current, int length, int* path, bo
     visited[current] = false;
 }
 
+// Function to find cycles up to a maximum length
+void find_large_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , int * num_cycle, HashTable * table,int min_weight, int * current_cycles) {
+    if (current_cycles[0] >= MAX_LONG_CYCLE) return;
+
+    path[length - 1] = current;
+
+    visited[current] = true;
+
+    EdgeInfo* out_edges = &graph->out_edge[current];
+
+
+    int thread_id=omp_get_thread_num();
+    for (int i = 0; i < out_edges->count; i++) {
+        if (current_cycles[0] >= MAX_LONG_CYCLE) {
+             break;
+        };
+        int edge_index = out_edges->edges[i];
+        Edge* edge = &mapped_edges[edge_index];
+        int target_index = edge->target;
+        if (edge->target == start && length > MAX_CYCLE_LENGTH && removed_edges[edge_index] == false) {
+            // Cycle detected
+            if (edge->weight<min_weight) {
+              min_weight=edge->weight;
+            }
+            current_cycles[0]+=1;
+            num_cycle[0]+=1;
+            if (verbosity >2) {
+                printf("Thread %3d, find %8d(th) cycle starting from vertex %7d with long length %8d through %7d\n",thread_id,num_cycle[0], start,length,target_index);
+            }
+            // Update the weights in the shared_weights array
+            for (int j = 0; j < length - 1; j++) {
+                int u = path[j];
+                int v = path[j + 1];
+                int idx = get_edge_number(table,u,v);
+                atomic_fetch_sub(&shared_weights[idx],min_weight);
+                if (verbosity >4){
+                    printf("Thread %3d, update %8d(th) cycle's (len=%5d) weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,num_cycle[0],length, graph->edges[idx].weight,shared_weights[idx],u,v);
+                }
+            }
+            atomic_fetch_sub(&shared_weights[edge_index],min_weight);
+            if (verbosity >4){
+                printf("Thread %3d, update %8d(th) cycle's (len=%5d) weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,num_cycle[0], length,graph->edges[edge_index].weight,shared_weights[edge_index],current, target_index);
+            }
+        } else if ( !visited[edge->target] && edge->target > start && removed_edges[edge_index] == false) {
+            if (edge->weight<min_weight) {
+              min_weight=edge->weight;
+            }
+            find_large_cycles(graph, start, edge->target, length + 1, path, visited,num_cycle,table,min_weight,current_cycles);
+        }
+    }
+
+    visited[current] = false;
+}
+
 // Function to mark removed edges
 void mark_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index) {
     if (length > MAX_CYCLE_LENGTH) return;
@@ -326,6 +381,55 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
 }
 
 
+
+
+// Function to mark removed edges
+void mark_long_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index, int* current_cycles) {
+    if (current_cycles[0] >= MAX_LONG_CYCLE) return;
+
+    path[length - 1] = current;
+
+    visited[current] = true;
+    EdgeInfo* out_edges = &graph->out_edge[current];
+
+    int thread_id=omp_get_thread_num();
+    for (int i = 0; i < out_edges->count; i++) {
+        if (current_cycles[0] >= MAX_LONG_CYCLE) {
+              break;
+        }
+        int edge_index = out_edges->edges[i];
+        Edge* edge = &mapped_edges[edge_index];
+        int target_index = edge->target;
+        long int longweight=edge->weight;
+        if (longweight+shared_weights[edge_index]<min_shared_weight) {
+              min_shared_weight=longweight+shared_weights[edge_index];
+              min_shared_edge_index=edge_index;
+        }
+
+        if (edge->target == start && length >MAX_CYCLE_LENGTH &&  removed_edges[edge_index]==false ) {
+            // Cycle detected
+            if (edge->weight+shared_weights[edge_index]<min_shared_weight) {
+                  min_shared_weight=edge->weight+shared_weights[edge_index];
+                  min_shared_edge_index=edge_index;
+            }
+            atomic_store(& removed_edges[min_shared_edge_index], true);
+            num_edges[0]+=1;
+            current_cycles[0]+=1;
+            if (verbosity >2){
+                printf("Thread %3d, removed %8d(th) edge (%18ld,%18ld,%8d)\n",thread_id,num_edges[0], graph->edges[min_shared_edge_index].source,graph->edges[min_shared_edge_index].target,graph->edges[min_shared_edge_index].weight);
+            }
+        } else if (!visited[target_index] && edge->target > start && removed_edges[edge_index] == false ) {
+            if (edge->weight+shared_weights[edge_index]<min_shared_weight) {
+                  min_shared_weight=edge->weight+shared_weights[edge_index];
+                  min_shared_edge_index=edge_index;
+            }
+            mark_long_removed_edges(graph, start, edge->target, length + 1, path, visited, num_edges,table,min_shared_weight,min_shared_edge_index,current_cycles);
+        }
+    }
+
+    visited[current] = false;
+}
+
 int main(int argc, char * argv[]) {
     //./ompdfs graphname [maxcyclelen verbersity mincyclelen]
     const char* input_filename = argv[1];
@@ -337,7 +441,11 @@ int main(int argc, char * argv[]) {
          if (argc >4) {
             MIN_CYCLE_LENGTH=atoi(argv[4]);
          }
+         if (argc >5) {
+            MAX_LONG_CYCLE=atoi(argv[5]);
+         }
     } 
+
     struct timeval start, end;
     long seconds, useconds;
     double elapsed;
@@ -371,7 +479,8 @@ int main(int argc, char * argv[]) {
 
     // Find cycles and update weights
     int number_cycles=0;
-    #pragma omp parallel for reduction(+:number_cycles) schedule(dynamic)
+    int current_cycles=0;
+    #pragma omp parallel for reduction(+:number_cycles,current_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
         int path[MAX_CYCLE_LENGTH];
@@ -379,9 +488,10 @@ int main(int argc, char * argv[]) {
         int thread_id=omp_get_thread_num();
 
         find_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX);
+        find_large_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX,&current_cycles);
 
         if (verbosity >1 || i % 1000 ==0){
-                printf("Thread %4d of %4d, find %8d(th) cycle's (%5d=<length<=%5d)\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH);
+                printf("Thread %4d of %4d, find %8d(th) cycle's (%5d=<length<=%5d), %d long cycles\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH,current_cycles);
         }
 
     }
@@ -390,16 +500,18 @@ int main(int argc, char * argv[]) {
     seconds  = end.tv_sec  - start.tv_sec;
     useconds = end.tv_usec - start.tv_usec;
     elapsed = seconds + useconds/1000000.0;
-    printf("Find %15d Cycles with the largest length %10d, Time taken: %f seconds\n\n",number_cycles, MAX_CYCLE_LENGTH, elapsed);
+    printf("Find %15d Cycles, Time taken: %f seconds\n\n",number_cycles+current_cycles, elapsed);
 
     // Mark removed edges
     gettimeofday(&start, NULL);
     int number_edges=0;
-    #pragma omp parallel for reduction(+:number_edges) schedule(dynamic)
+    current_cycles=0;
+    #pragma omp parallel for reduction(+:number_edges,current_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
         int path[MAX_CYCLE_LENGTH];
         mark_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
+        mark_long_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&current_cycles);
     }
 
     gettimeofday(&end, NULL);

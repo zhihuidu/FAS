@@ -414,7 +414,8 @@ def process_graph(file_path):
                    subnum += 1
                    smallcom=random.sample(component, newsize)
                    component.difference_update(smallcom)
-                   mergeset=smallcom|heavyset
+                   smallcom=set(smallcom)
+                   mergeset=smallcom.union(heavyset)
                    removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 11, 5,edge_flag )
                    removed_weight+=removed_weight1
                    addnum=max(num-oldnum,1)
