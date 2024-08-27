@@ -14,6 +14,7 @@
 int MAX_CYCLE_LENGTH=3;
 int MIN_CYCLE_LENGTH=2;
 int MAX_LONG_CYCLE=5;
+int MAX_SEARCH_LEN=2000;
 
 typedef struct {
     int source;
@@ -286,6 +287,7 @@ void find_cycles(Graph* graph, int start, int current, int length, int* path, bo
 // Function to find cycles up to a maximum length
 void find_large_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , int * num_cycle, HashTable * table,int min_weight, int * cur_large_cycles) {
     if (cur_large_cycles[0] >= MAX_LONG_CYCLE) return;
+    if (length >= MAX_SEARCH_LEN) return;
 
     path[length - 1] = current;
 
@@ -386,6 +388,7 @@ void mark_removed_edges(Graph* graph, int start, int current, int length, int* p
 // Function to mark removed edges
 void mark_long_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index, int* cur_large_cycles) {
     if (cur_large_cycles[0] >= MAX_LONG_CYCLE) return;
+    if (length >= MAX_SEARCH_LEN) return;
 
     path[length - 1] = current;
 
@@ -444,6 +447,9 @@ int main(int argc, char * argv[]) {
          if (argc >5) {
             MAX_LONG_CYCLE=atoi(argv[5]);
          }
+         if (argc >6) {
+            MAX_SEARCH_LEN=atoi(argv[6]);
+         }
     } 
 
     struct timeval start, end;
@@ -483,7 +489,7 @@ int main(int argc, char * argv[]) {
     #pragma omp parallel for reduction(+:number_cycles,cur_large_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
-        int path[MAX_NODES];
+        int path[MAX_SEARCH_LEN];
         int num_threads=omp_get_num_threads();
         int thread_id=omp_get_thread_num();
 
@@ -509,7 +515,7 @@ int main(int argc, char * argv[]) {
     #pragma omp parallel for reduction(+:number_edges,cur_large_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
-        int path[MAX_NODES];
+        int path[MAX_SEARCH_LEN];
         mark_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
         mark_long_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&cur_large_cycles);
     }
