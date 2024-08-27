@@ -1,9 +1,12 @@
+import matplotlib.pyplot as plt
+from collections import Counter
 import pandas as pd
 import networkx as nx
 from networkx.algorithms.cycles import simple_cycles
 import gurobipy as gp
 from gurobipy import GRB
 import sys
+import os
 from datetime import datetime
 import time
 import csv
@@ -11,7 +14,7 @@ import random
 from itertools import permutations
 
 
-FileNameHead="SCC-DFS"
+FileNameHead="OMP-SCC-DFS"
 
 #given a graph file in the csv format (each line is (source,destination, weight)), generate the graph data structure
 
@@ -97,7 +100,79 @@ def read_ID_Mapping(file_path):
     data_dict = {key: value for key, value in data_table}
     return data_dict
 
+def read_removed_edges(file_path,edge_flag):
+    removed_weight=0
+    with open(file_path,mode='r') as f:
+        csv_reader = csv.reader(f)
+        for row in csv_reader:
+            source = int(row[0])
+            dest = int(row[1])
+            weight = int(row[2])  
+            if edge_flag[(source,dest)]==1:
+                edge_flag[(source,dest)]=0
+                removed_weight+=weight
+    return removed_weight
+
 num=0
+
+
+
+def solve_ip_scc(G,edge_flag):
+    global num
+    removed_weight=0
+    model = gp.Model("min_feedback_arc_set")
+    model.setParam('OutputFlag', 0)  # Silent mode
+
+    # Create binary variables for each edge
+    edge_vars = {}
+    for u, v, data in G.edges(data=True):
+        edge_vars[(u, v)] = model.addVar(vtype=GRB.BINARY, obj=data['weight'])
+
+    cycles = nx.simple_cycles(G)
+    for cycle in cycles:
+        #print(f"the cycle is {cycle}")
+        cycle_edges = [(cycle[i], cycle[(i+1) % len(cycle)]) for i in range(len(cycle))]
+        model.addConstr(gp.quicksum(edge_vars[edge] for edge in cycle_edges) >= 1)
+
+    # Optimize the model
+    model.optimize()
+
+    # Get the edges to be removed
+    for edge, var in edge_vars.items():
+            if var.x > 0.5:
+               if edge_flag[(edge[0],edge[1])]==1:
+                    removed_weight+=G[edge[0]][edge[1]]['weight']
+                    num+=1
+    return removed_weight
+
+
+
+
+def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,edge_flag):
+    removed_weight=0
+    global num
+
+    # Create the subgraph
+    G_sub = G.subgraph(nodes).copy()
+
+    with open("tmp-omp-file.csv", 'w') as f:
+        for u, v, data in G_sub.edges(data=True):
+            f.write(f"{u},{v},{data['weight']}\n")
+    commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen}"
+    os.system(commandline)
+
+    with open("tmp-omp-removed-edges.csv",mode='r') as f:
+        csv_reader = csv.reader(f)
+        for row in csv_reader:
+            source = int(row[0])
+            dest = int(row[1])
+            weight = int(row[2])  
+            if edge_flag[(source,dest)]==1:
+                edge_flag[(source,dest)]=0
+                removed_weight+=weight
+                num+=1
+    return removed_weight 
+
 def sccdfs_remove_cycle_edges(nodes,edge_weights,out_adj,edge_flag):
     oldnum=num
     removed_weight=0
@@ -238,7 +313,54 @@ def again_dfs_remove_cycle_edges(nodes,edge_weights,out_adj,edge_flag):
     print("finish  again bfs")
     return removed_weight 
 
+# Normalize distributions to get probabilities
+def normalize_distribution(distribution):
+    total = sum(distribution.values())
+    return {k: v / total for k, v in distribution.items()}
 
+# Calculate min, max, and average values
+def calculate_stats(distribution):
+    keys = list(distribution.keys())
+    values = list(distribution.values())
+    min_val = min(keys)
+    max_val = max(keys)
+    mid_val= (min_val+max_val)/2
+    val_4_3= max_val-(min_val+max_val)/4
+    avg_val = sum(k * v for k, v in distribution.items())
+    total_key  = sum(k  for k, v in distribution.items())
+    above_mid = sum(k for k, v in distribution.items() if k>mid_val) 
+    above_4_3 = sum(k for k, v in distribution.items() if k>val_4_3) 
+    return min_val, max_val, avg_val/total_key, mid_val, above_mid, val_4_3, above_4_3
+
+def select_node(dic,stats,percentage,heavyset):
+     for node in dic:
+        if dic[node]>stats[1] * percentage:
+             heavyset.add(node)
+     
+def calculate_heavy_set(G,percentage):
+    # Calculate in-degree, out-degree, in-weight, and out-weight
+    in_degrees = dict(G.in_degree())
+    out_degrees = dict(G.out_degree())
+    in_weights = {node: sum(data['weight'] for _, _, data in G.in_edges(node, data=True)) for node in G.nodes()}
+    out_weights = {node: sum(data['weight'] for _, _, data in G.out_edges(node, data=True)) for node in G.nodes()}
+
+    # Calculate the distributions
+    in_degree_distribution = Counter(in_degrees.values())
+    out_degree_distribution = Counter(out_degrees.values())
+    in_weight_distribution = Counter(in_weights.values())
+    out_weight_distribution = Counter(out_weights.values())
+
+    in_degree_stats = calculate_stats(in_degree_distribution)
+    out_degree_stats = calculate_stats(out_degree_distribution)
+    in_weight_stats = calculate_stats(in_weight_distribution)
+    out_weight_stats = calculate_stats(out_weight_distribution)
+
+    heavyset=set()
+    select_node(in_degrees, in_degree_stats, percentage, heavyset)
+    select_node(out_degrees, out_degree_stats, percentage, heavyset)
+    #select_node(in_weights, in_weight_stats, percentage, heavyset)
+    #select_node(out_weights, out_weight_stats, percentage, heavyset)
+    return heavyset
 
 def process_graph(file_path):
     print(f"read data")
@@ -250,7 +372,8 @@ def process_graph(file_path):
 
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
-    removed_weight=again_dfs_remove_cycle_edges(node_list, edge_weights,out_edges,edge_flag )
+
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
 
     removednum=0
     for u,v in edge_flag:
@@ -262,6 +385,8 @@ def process_graph(file_path):
 
 
 
+
+    newsize=500
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG.")
         print(f"strongly connected components")
@@ -273,16 +398,38 @@ def process_graph(file_path):
                  continue
             print(f"handle the {numcomponent}th component with size {len(component)}")
             subnum=0
-            while len(component) >9000:
+            oldnum=num
+            if len(component)<500:
+                 G_sub = G.subgraph(component).copy()
+                 removed_weight1= solve_ip_scc(G_sub,edge_flag)
+                 removed_weight+=removed_weight1
+                 print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+                 continue
+            percentage=0.80
+            heavyset=set()
+            if len(component)>1000:
+                heavyset= calculate_heavy_set(shG,percentage)
+                while len(heavyset)<5:
+                    percentage-=0.05
+                    heavyset= calculate_heavy_set(shG,percentage)
+            print(f"Heavy set has {len(heavyset)} elements")
+            while len(component) >newsize:
                    print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    subnum += 1
-                   smallcom=random.sample(component, 9000)
+                   smallcom=random.sample(component, newsize)
                    component.difference_update(smallcom)
-                   #smallG=build_small_graph(shG,smallcom,edge_flag)
-                   removed_weight1=sccdfs_remove_cycle_edges(list(smallcom), edge_weights,out_edges,edge_flag )
+                   smallcom=set(smallcom)
+                   mergeset=smallcom.union(heavyset)
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 50, 2,edge_flag )
                    removed_weight+=removed_weight1
+                   addnum=max(num-oldnum,1)
+                   if addnum < 100:
+                        newsize=newsize*2
+                   #newsize=min(len(component),newsize)
+                   print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
-            removed_weight1 = sccdfs_remove_cycle_edges(list(component), edge_weights,out_edges,edge_flag )
+
+            removed_weight1 = ompdfs_remove_cycle_edges(component, G,100,2,edge_flag )
             removed_weight+=removed_weight1
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
             numcomponent+=1

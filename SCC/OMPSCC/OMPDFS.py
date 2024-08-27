@@ -387,8 +387,6 @@ def process_graph(file_path):
 
 
     newsize=3000
-    heavyset= calculate_heavy_set(G,0.15)
-    print(f"Heavy set has {len(heavyset)} elements")
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG.")
         print(f"strongly connected components")
@@ -407,15 +405,22 @@ def process_graph(file_path):
                  removed_weight+=removed_weight1
                  print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
                  continue
-
-
+            percentage=0.80
+            heavyset=set()
+            if len(component)>1000:
+                heavyset= calculate_heavy_set(shG,percentage)
+                while len(heavyset)<5:
+                    percentage-=0.05
+                    heavyset= calculate_heavy_set(shG,percentage)
+            print(f"Heavy set has {len(heavyset)} elements")
             while len(component) >newsize:
                    print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    subnum += 1
                    smallcom=random.sample(component, newsize)
                    component.difference_update(smallcom)
-                   mergeset=smallcom|heavyset
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 11, 5,edge_flag )
+                   smallcom=set(smallcom)
+                   mergeset=smallcom.union(heavyset)
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 100, 2,edge_flag )
                    removed_weight+=removed_weight1
                    addnum=max(num-oldnum,1)
                    if addnum < 100:
@@ -424,7 +429,7 @@ def process_graph(file_path):
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
 
-            removed_weight1 = ompdfs_remove_cycle_edges(component, G,10,2,edge_flag )
+            removed_weight1 = ompdfs_remove_cycle_edges(component, G,100,2,edge_flag )
             removed_weight+=removed_weight1
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
             numcomponent+=1
