@@ -148,7 +148,7 @@ def solve_ip_scc(G,edge_flag):
 
 
 
-def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,long_cycle_len,edge_flag):
+def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,len_long_cycle,edge_flag):
     removed_weight=0
     global num
 
@@ -158,7 +158,7 @@ def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,long_cycle_
     with open("tmp-omp-file.csv", 'w') as f:
         for u, v, data in G_sub.edges(data=True):
             f.write(f"{u},{v},{data['weight']}\n")
-    commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen} {num_long_cycles} {long_cycle_len}"
+    commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen} {num_long_cycles} {len_long_cycle}"
     os.system(commandline)
 
     with open("tmp-omp-removed-edges.csv",mode='r') as f:
@@ -386,7 +386,7 @@ def process_graph(file_path):
 
 
 
-    newsize=3000
+    newsize=5000
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG.")
         print(f"strongly connected components")
@@ -420,7 +420,7 @@ def process_graph(file_path):
                    component.difference_update(smallcom)
                    smallcom=set(smallcom)
                    mergeset=smallcom.union(heavyset)
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 20, 2, 10, 500, edge_flag )
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 20, 2, 10, 100, edge_flag )
                    removed_weight+=removed_weight1
                    addnum=max(num-oldnum,1)
                    if addnum < 100:
@@ -429,7 +429,7 @@ def process_graph(file_path):
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
 
-            removed_weight1 = ompdfs_remove_cycle_edges(component, G,100,2,10,500,edge_flag )
+            removed_weight1 = ompdfs_remove_cycle_edges(component, G,20,2,10,100,edge_flag )
             removed_weight+=removed_weight1
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
             numcomponent+=1
