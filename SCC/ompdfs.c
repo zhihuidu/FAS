@@ -283,7 +283,7 @@ void find_fix_cycles(Graph* graph, int start, int current, int length, int* path
 }
 
 // Function to find cycles up to a maximum length
-void find_mix_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , long int * num_cycle, HashTable * table,int min_weight, int * cur_large_cycles) {
+void find_mix_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , long int * num_cycle, HashTable * table,int min_weight, long int * cur_large_cycles) {
     if (length > MAX_SEARCH_LEN ||(cur_large_cycles[0] >= LARGE_CYCLE_NUM &&  length > MAX_CYCLE_LENGTH)) return;
 
     path[length - 1] = current;
@@ -387,7 +387,7 @@ void mark_fix_removed_edges(Graph* graph, int start, int current, int length, in
 
 
 // Function to mark removed edges
-void mark_mix_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index, int* cur_large_cycles) {
+void mark_mix_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index, long int* cur_large_cycles) {
     if (length > MAX_SEARCH_LEN ||(cur_large_cycles[0] >= LARGE_CYCLE_NUM &&  length > MAX_CYCLE_LENGTH)) return;
 
     path[length - 1] = current;
@@ -499,7 +499,7 @@ int main(int argc, char * argv[]) {
 
     // Find cycles and update weights
     long int number_cycles=0;
-    int cur_large_cycles=0;
+    long int cur_large_cycles=0;
     #pragma omp parallel for reduction(+:number_cycles,cur_large_cycles) schedule(dynamic)
     for (int i = 0; i < graph.num_nodes; i++) {
         bool visited[MAX_NODES] = {false};
