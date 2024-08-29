@@ -142,6 +142,7 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
                     num+=1
     return removed_weight
 
@@ -376,24 +377,25 @@ def process_graph(file_path):
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    #removed_weight=read_removed_edges("removed.csv",edge_flag )
 
     removednum=0
+    '''
     for u,v in edge_flag:
         if edge_flag[(u,v)]==0:
            removednum+=1
     print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
-
+'''
     shG=build_new_shrunk_graph (G,edge_flag)
 
 
 
 
-    newsize=5000
-    fixcyclelen=5
-    maxcyclelen=100
-    numcycles=2000
-    heavysetsize=200
+    newsize=500
+    fixcyclelen=50
+    maxcyclelen=2000
+    numcycles=2000000
+    heavysetsize=20
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG. Finding strongly connected components")
         scc=list(nx.strongly_connected_components(shG))
@@ -410,14 +412,13 @@ def process_graph(file_path):
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
-                 numcomponent+=1
                  print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
             percentage=0.80
             heavyset=set()
             if len(component)>1000:
                 heavyset= calculate_heavy_set(shG,percentage)
-                while len(heavyset)<heavysetsize:
+                while len(heavyset)<heavysetsize and percentage>0.0:
                     percentage-=0.05
                     heavyset= calculate_heavy_set(shG,percentage)
             print(f"Heavy set has {len(heavyset)} elements")
@@ -428,15 +429,15 @@ def process_graph(file_path):
                    component.difference_update(smallcom)
                    smallcom=set(smallcom)
                    mergeset=smallcom.union(heavyset)
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, fixcyclelen, 2, numcycles,maxcyclelen, edge_flag )
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, shG, fixcyclelen, 2, numcycles,maxcyclelen, edge_flag )
                    removed_weight+=removed_weight1
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
 
-            removed_weight1 = ompdfs_remove_cycle_edges(component, G,fixcyclelen,2,numcycles,maxcyclelen,edge_flag )
+            removed_weight1 = ompdfs_remove_cycle_edges(component, shG,fixcyclelen,2,numcycles,maxcyclelen,edge_flag )
             removed_weight+=removed_weight1
 
-            print(f"basic subgraph size is {newsize}, cycle size is {cyclelen}, num of scc is {len(scc)}\n")
+            print(f"basic subgraph size is {newsize}, fix cycle size is {fixcyclelen}, num of scc is {len(scc)}, max cycle len is {maxcyclelen}\n")
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
 
             oldnum=removednum
@@ -449,10 +450,11 @@ def process_graph(file_path):
             print(f"to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
             addnum=max(removednum-oldnum,1)
-                   if addnum < 1000:
+            if addnum < 1000:
                         newsize=newsize*2
                         cyclelen+=1
                         heavysetsize+=10
+                        maxcyclelen+=100
 
         print(f"sum of removed weight={removed_weight},percentage of remained  weight ={(total-removed_weight)/total *100}")
 

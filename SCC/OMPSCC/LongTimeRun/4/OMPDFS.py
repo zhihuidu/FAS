@@ -142,6 +142,7 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
                     num+=1
     return removed_weight
 
@@ -365,6 +366,34 @@ def calculate_heavy_set(G,percentage):
     select_node(out_weights, out_weight_stats, percentage, heavyset)
     return heavyset
 
+def remove_highdegree_lowweight_edge(G,p1,p2,edge_flag):
+    # Calculate in-degree, out-degree, in-weight, and out-weight
+    in_degrees = dict(G.in_degree())
+    out_degrees = dict(G.out_degree())
+    in_weights = {node: sum(data['weight'] for _, _, data in G.in_edges(node, data=True)) for node in G.nodes()}
+    out_weights = {node: sum(data['weight'] for _, _, data in G.out_edges(node, data=True)) for node in G.nodes()}
+
+    # Calculate the distributions
+    in_degree_distribution = Counter(in_degrees.values())
+    out_degree_distribution = Counter(out_degrees.values())
+    in_weight_distribution = Counter(in_weights.values())
+    out_weight_distribution = Counter(out_weights.values())
+
+    in_degree_stats = calculate_stats(in_degree_distribution)
+    out_degree_stats = calculate_stats(out_degree_distribution)
+    in_weight_stats = calculate_stats(in_weight_distribution)
+    out_weight_stats = calculate_stats(out_weight_distribution)
+    diff_in=in_degree_stats[1]-in_degree_stats[0]
+    diff_out=out_degree_stats[1]-out_degree_stats[0]
+
+    num_removed=0
+    for u,v,data in G.edges(data=True):
+        if in_degrees[u] >=p1 and out_degrees[v]>=p1 and data['weight'] <3:
+            edge_flag[(u,v)]=0
+            num_removed+=1
+            #print(f"({u},{v},{data['weight']} indegree={in_degrees[u]} max in degree {in_degree_stats[1]}, max out degree {out_degree_stats[1]} outdegree={out_degrees[v]},average in weight {in_weight_stats[2]} average out weight {out_weight_stats[2]}")
+    return num_removed
+
 def process_graph(file_path):
     print(f"read data")
     node_list, edge_weights, in_edges, out_edges = create_adjacency_lists(file_path)
@@ -375,24 +404,27 @@ def process_graph(file_path):
 
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
+    
+    num_removed=remove_highdegree_lowweight_edge(G,200,200,edge_flag)
+    print(f"removed {num_removed} edges with degree >= 200")
 
-    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    #removed_weight=read_removed_edges("removed.csv",edge_flag )
 
     removednum=0
     for u,v in edge_flag:
         if edge_flag[(u,v)]==0:
-           removednum+=1
+            removed_weight+=edge_weights[(u,v)]
+            removednum+=1
     print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
-
     shG=build_new_shrunk_graph (G,edge_flag)
 
 
 
 
-    newsize=5000
+    newsize=10000
     fixcyclelen=5
-    maxcyclelen=100
-    numcycles=2000
+    maxcyclelen=2000
+    numcycles=2000000
     heavysetsize=200
     while not nx.is_directed_acyclic_graph(shG):
         print("the graph is not a DAG. Finding strongly connected components")
@@ -410,14 +442,13 @@ def process_graph(file_path):
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
-                 numcomponent+=1
                  print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
             percentage=0.80
             heavyset=set()
             if len(component)>1000:
                 heavyset= calculate_heavy_set(shG,percentage)
-                while len(heavyset)<heavysetsize:
+                while len(heavyset)<heavysetsize and percentage>0.0:
                     percentage-=0.05
                     heavyset= calculate_heavy_set(shG,percentage)
             print(f"Heavy set has {len(heavyset)} elements")
@@ -428,15 +459,15 @@ def process_graph(file_path):
                    component.difference_update(smallcom)
                    smallcom=set(smallcom)
                    mergeset=smallcom.union(heavyset)
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, fixcyclelen, 2, numcycles,maxcyclelen, edge_flag )
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, shG, fixcyclelen, 2, numcycles,maxcyclelen, edge_flag )
                    removed_weight+=removed_weight1
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
 
-            removed_weight1 = ompdfs_remove_cycle_edges(component, G,fixcyclelen,2,numcycles,maxcyclelen,edge_flag )
+            removed_weight1 = ompdfs_remove_cycle_edges(component, shG,fixcyclelen,2,numcycles,maxcyclelen,edge_flag )
             removed_weight+=removed_weight1
 
-            print(f"basic subgraph size is {newsize}, cycle size is {cyclelen}, num of scc is {len(scc)}\n")
+            print(f"basic subgraph size is {newsize}, fix cycle size is {fixcyclelen}, num of scc is {len(scc)}, max cycle len is {maxcyclelen}\n")
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
 
             oldnum=removednum
@@ -449,10 +480,11 @@ def process_graph(file_path):
             print(f"to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
             addnum=max(removednum-oldnum,1)
-                   if addnum < 1000:
+            if addnum < 1000:
                         newsize=newsize*2
                         cyclelen+=1
                         heavysetsize+=10
+                        maxcyclelen+=100
 
         print(f"sum of removed weight={removed_weight},percentage of remained  weight ={(total-removed_weight)/total *100}")
 

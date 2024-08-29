@@ -155,6 +155,9 @@ def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,len_long_cy
     # Create the subgraph
     G_sub = G.subgraph(nodes).copy()
 
+    commandline=f"rm -f tmp-omp-file.csv tmp-omp-removed-edges.csv"
+    os.system(commandline)
+
     with open("tmp-omp-file.csv", 'w') as f:
         for u, v, data in G_sub.edges(data=True):
             f.write(f"{u},{v},{data['weight']}\n")
@@ -387,58 +390,69 @@ def process_graph(file_path):
 
 
     newsize=5000
+    fixcyclelen=5
+    maxcyclelen=100
+    numcycles=2000
+    heavysetsize=200
     while not nx.is_directed_acyclic_graph(shG):
-        print("the graph is not a DAG.")
-        print(f"strongly connected components")
+        print("the graph is not a DAG. Finding strongly connected components")
         scc=list(nx.strongly_connected_components(shG))
         print(f"number of scc is {len(scc)}")
         numcomponent=0
+        oldnum=num
         for component in scc:
             if len(component)==1:
                  continue
+            numcomponent+=1
             print(f"handle the {numcomponent}th component with size {len(component)}")
             subnum=0
-            oldnum=num
             if len(component)<200:
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
-                 print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+                 numcomponent+=1
+                 print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
             percentage=0.80
             heavyset=set()
             if len(component)>1000:
                 heavyset= calculate_heavy_set(shG,percentage)
-                while len(heavyset)<5:
+                while len(heavyset)<heavysetsize:
                     percentage-=0.05
                     heavyset= calculate_heavy_set(shG,percentage)
             print(f"Heavy set has {len(heavyset)} elements")
             while len(component) >newsize:
-                   print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    subnum += 1
+                   print(f"handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
                    smallcom=random.sample(component, newsize)
                    component.difference_update(smallcom)
                    smallcom=set(smallcom)
                    mergeset=smallcom.union(heavyset)
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, 20, 2, 10, 100, edge_flag )
+                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, fixcyclelen, 2, numcycles,maxcyclelen, edge_flag )
                    removed_weight+=removed_weight1
-                   addnum=max(num-oldnum,1)
-                   if addnum < 100:
-                        newsize=newsize*2
-                   #newsize=min(len(component),newsize)
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
 
-            removed_weight1 = ompdfs_remove_cycle_edges(component, G,20,2,10,100,edge_flag )
+            removed_weight1 = ompdfs_remove_cycle_edges(component, G,fixcyclelen,2,numcycles,maxcyclelen,edge_flag )
             removed_weight+=removed_weight1
-            print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
-            numcomponent+=1
 
+            print(f"basic subgraph size is {newsize}, cycle size is {cyclelen}, num of scc is {len(scc)}\n")
+            print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+
+            oldnum=removednum
             removednum=0
+            actweight=0
             for u,v in edge_flag:
                 if edge_flag[(u,v)]==0:
                     removednum+=1
-            print(f"to here removed {removednum} edges")
+                    actweight+=edge_weights[(u,v)]
+            print(f"to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
+
+            addnum=max(removednum-oldnum,1)
+                   if addnum < 1000:
+                        newsize=newsize*2
+                        cyclelen+=1
+                        heavysetsize+=10
 
         print(f"sum of removed weight={removed_weight},percentage of remained  weight ={(total-removed_weight)/total *100}")
 
@@ -447,7 +461,7 @@ def process_graph(file_path):
         dag_weight=sum(data['weight'] for u, v, data in shG.edges(data=True))
         print(f"dag weight={dag_weight}")
         if dag_weight+removed_weight != total:
-            print("something wrong with the removed edge weights, remained weights, and the total weights")
+            print("accumulated weight in each step is not the same as the final removed weight")
 
 
 
