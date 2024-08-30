@@ -13,8 +13,10 @@
 
 int MAX_CYCLE_LENGTH=3;
 int MIN_CYCLE_LENGTH=2;
-int ALL_CYCLE_NUM=5;
+long int ALL_CYCLE_NUM=5;
 int MAX_SEARCH_LEN=2000;
+time_t start_time,end_time;
+int time_threshold=15;
 
 typedef struct {
     int source;
@@ -49,6 +51,7 @@ int total_weight=0;              // total weight of the graph
 Edge mapped_edges[MAX_EDGES];    // Static array of all edges but vertices are mapped to 0-MAX_NODES-1
 
 bool removed_edges[MAX_EDGES]={false};       //if the edge has been removed
+bool cycle_edges[MAX_EDGES]={false};       //if the edge is part of a cycle
 
 int verbosity=0; //1 highly recommended; 2 recommended; >2 debugging info
 
@@ -234,7 +237,10 @@ void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
 // Function to find cycles up to a maximum length
 void find_fix_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , long int * num_cycle, HashTable * table,int min_weight) {
     if (length > MAX_CYCLE_LENGTH) return;
-
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
+    }
     path[length - 1] = current;
 
     visited[current] = true;
@@ -261,12 +267,14 @@ void find_fix_cycles(Graph* graph, int start, int current, int length, int* path
                 int u = path[j];
                 int v = path[j + 1];
                 int idx = get_edge_number(table,u,v);
+                atomic_store(& cycle_edges[idx], true);
                 atomic_fetch_sub(&shared_weights[idx],min_weight);
                 if (verbosity >4){
                     printf("Thread %3d, update %8d(th) cycle's (len=%5d) weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,num_cycle[0],length, graph->edges[idx].weight,shared_weights[idx],u,v);
                 }
             }
             atomic_fetch_sub(&shared_weights[edge_index],min_weight);
+            atomic_store(& cycle_edges[edge_index], true);
             if (verbosity >4){
                 printf("Thread %3d, update %8d(th) cycle's (len=%5d) weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,num_cycle[0], length,graph->edges[edge_index].weight,shared_weights[edge_index],current, target_index);
             }
@@ -288,6 +296,10 @@ void find_mix_cycles(Graph* graph, int start, int current, int length, int* path
 		    visited[path[length-1]]=false;
             }
             return;
+    }
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
     }
 
     path[length - 1] = current;
@@ -320,11 +332,13 @@ void find_mix_cycles(Graph* graph, int start, int current, int length, int* path
                 int v = path[j + 1];
                 int idx = get_edge_number(table,u,v);
                 atomic_fetch_sub(&shared_weights[idx],min_weight);
+                atomic_store(& cycle_edges[idx], true);
                 if (verbosity >4){
                     printf("Thread %3d, update %5d(th) edge in the cycle (len=%5d) from weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,j, length, graph->edges[idx].weight,shared_weights[idx],u,v);
                 }
             }
             atomic_fetch_sub(&shared_weights[edge_index],min_weight);
+            atomic_store(& cycle_edges[edge_index], true);
             if (verbosity >4){
                 printf("Thread %3d, update %5d(th) edge in the cycle (len=%5d) from weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,length, length, graph->edges[edge_index].weight,shared_weights[edge_index],path[length-1],start);
             }
@@ -339,9 +353,77 @@ void find_mix_cycles(Graph* graph, int start, int current, int length, int* path
     visited[current] = false;
 }
 
+
+
+
+// Function to find cycles up to a maximum length
+void sequential_find_mix_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , long int * num_cycle, HashTable * table,int min_weight, long int * cur_large_cycles) {
+    if (length > MAX_SEARCH_LEN  )  {
+	    if (length >1) {
+	        visited[path[length-1]]=false;
+            }
+            return;
+    }
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
+    }
+
+    path[length - 1] = current;
+
+    visited[current] = true;
+
+    EdgeInfo* out_edges = &graph->out_edge[current];
+
+
+    int thread_id=omp_get_thread_num();
+    for (int i = 0; i < out_edges->count; i++) {
+        int edge_index = out_edges->edges[i];
+        Edge* edge = &mapped_edges[edge_index];
+        int target_index = edge->target;
+        if (edge->target == start && length > MIN_CYCLE_LENGTH && removed_edges[edge_index] == false) {
+            // Cycle detected
+            if (edge->weight<min_weight) {
+                 min_weight=edge->weight;
+            }
+            atomic_fetch_add(&cur_large_cycles[0],1);
+            if (verbosity >2) {
+                printf("Thread %3d, find %8d(th) cycle starting from vertex %7d with length %8d through %7d\n",thread_id,num_cycle[0], start,length,target_index);
+            }
+            // Update the weights in the shared_weights array
+            for (int j = 0; j < length - 1; j++) {
+                int u = path[j];
+                int v = path[j + 1];
+                int idx = get_edge_number(table,u,v);
+                atomic_fetch_sub(&shared_weights[idx],min_weight);
+                atomic_store(& cycle_edges[idx], true);
+                if (verbosity >4){
+                    printf("Thread %3d, update %5d(th) edge in the cycle (len=%5d) from weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,j, length, graph->edges[idx].weight,shared_weights[idx],u,v);
+                }
+            }
+            atomic_fetch_sub(&shared_weights[edge_index],min_weight);
+            atomic_store(& cycle_edges[edge_index], true);
+            if (verbosity >4){
+                printf("Thread %3d, update %5d(th) edge in the cycle (len=%5d) from weight %6d to %12ld of edge (%6d,%6d) \n",thread_id,length, length, graph->edges[edge_index].weight,shared_weights[edge_index],path[length-1],start);
+            }
+        } else if ( !visited[edge->target] && edge->target > start && removed_edges[edge_index] == false) {
+            if (edge->weight<min_weight) {
+                min_weight=edge->weight;
+            }
+            sequential_find_mix_cycles(graph, start, edge->target, length + 1, path, visited, num_cycle,table,min_weight,cur_large_cycles);
+        }
+    }
+
+    visited[current] = false;
+}
+	
 // Function to mark removed edges
 void mark_fix_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index) {
     if (length > MAX_CYCLE_LENGTH) return;
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
+    }
 
     path[length - 1] = current;
 
@@ -389,6 +471,10 @@ void mark_mix_removed_edges(Graph* graph, int start, int current, int length, in
             }
             return;
     }
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
+    }
 
     path[length - 1] = current;
 
@@ -429,6 +515,59 @@ void mark_mix_removed_edges(Graph* graph, int start, int current, int length, in
     visited[current] = false;
 }
 
+
+
+
+// Function to mark removed edges
+void sequential_mark_mix_removed_edges(Graph* graph, int start, int current, int length, int* path, bool* visited,int * num_edges,HashTable * table,long int min_shared_weight,int min_shared_edge_index, long int* cur_large_cycles) {
+    if (length > MAX_SEARCH_LEN )  {
+	    if (length >1) {
+		    visited[path[length-1]]=false;
+            }
+            return;
+    }
+    //double elapse_time=(double)(clock()-start_time)/CLOCKS_PER_SEC;
+    time(&end_time);
+    if (end_time-start_time>time_threshold) {
+	    return;
+    }
+
+    path[length - 1] = current;
+
+    visited[current] = true;
+    EdgeInfo* out_edges = &graph->out_edge[current];
+
+    int thread_id=omp_get_thread_num();
+    for (int i = 0; i < out_edges->count; i++) {
+        int edge_index = out_edges->edges[i];
+        Edge* edge = &mapped_edges[edge_index];
+        int target_index = edge->target;
+        long int longweight=edge->weight;
+
+        if (edge->target == start && length >MAX_CYCLE_LENGTH &&  removed_edges[edge_index]==false ) {
+            // Cycle detected
+            if (edge->weight+shared_weights[edge_index]<min_shared_weight) {
+                  min_shared_weight=edge->weight+shared_weights[edge_index];
+                  min_shared_edge_index=edge_index;
+            }
+            atomic_store(& removed_edges[min_shared_edge_index], true);
+            atomic_fetch_add(&cur_large_cycles[0],1);
+            atomic_fetch_add(&num_edges[0],1);
+            if (verbosity >2){
+                printf("Thread %3d, removed %8d(th) edge (%18ld,%18ld,%8d)\n",thread_id,num_edges[0], graph->edges[min_shared_edge_index].source,graph->edges[min_shared_edge_index].target,graph->edges[min_shared_edge_index].weight);
+            }
+        } else if (!visited[target_index] && edge->target > start && removed_edges[edge_index] == false ) {
+            if (edge->weight+shared_weights[edge_index]<min_shared_weight) {
+                  min_shared_weight=edge->weight+shared_weights[edge_index];
+                  min_shared_edge_index=edge_index;
+            }
+            sequential_mark_mix_removed_edges(graph, start, edge->target, length + 1, path, visited, num_edges,table,min_shared_weight,min_shared_edge_index,cur_large_cycles);
+        }
+    }
+
+    visited[current] = false;
+}
+
 int main(int argc, char * argv[]) {
     // run it like this ./ompdfs graphname [maxcyclelen verbersity mincyclelen numoflargecycles largestcyclelen]
     const char* input_filename = argv[1];
@@ -439,12 +578,22 @@ int main(int argc, char * argv[]) {
          }
          if (argc >4) {
             MIN_CYCLE_LENGTH=atoi(argv[4]);
+	    if (MIN_CYCLE_LENGTH>MAX_CYCLE_LENGTH) {
+		    MIN_CYCLE_LENGTH=MAX_CYCLE_LENGTH;
+	    }
          }
          if (argc >5) {
             ALL_CYCLE_NUM=atoi(argv[5]);
          }
          if (argc >6) {
             MAX_SEARCH_LEN=atoi(argv[6]);
+	    if (MAX_SEARCH_LEN <MAX_CYCLE_LENGTH) {
+		 MAX_SEARCH_LEN =MAX_CYCLE_LENGTH;
+	    }
+
+         }
+         if (argc >7) {
+            time_threshold=atoi(argv[7]);
          }
     } 
 
@@ -482,33 +631,47 @@ int main(int argc, char * argv[]) {
     // Find cycles and update weights
     long int number_cycles=0;
     long int cur_large_cycles=0;
-    #pragma omp parallel for reduction(+:number_cycles) schedule(dynamic)
-    for (int i = 0; i < graph.num_nodes; i++) {
-        bool visited[MAX_NODES] = {false};
-        int path[MAX_CYCLE_LENGTH];
-        int num_threads=omp_get_num_threads();
-        int thread_id=omp_get_thread_num();
-
-        find_fix_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX);
-    }
-
-    printf("Find %15ld Cycles in the first search\n",number_cycles);
-    if (number_cycles<ALL_CYCLE_NUM) {
-	cur_large_cycles=number_cycles;
-        #pragma omp parallel for reduction(+:cur_large_cycles) schedule(dynamic)
+    time(&start_time);
+    if ( MAX_SEARCH_LEN <= MAX_NODES ) {
+        #pragma omp parallel for reduction(+:number_cycles) schedule(dynamic)
         for (int i = 0; i < graph.num_nodes; i++) {
             bool visited[MAX_NODES] = {false};
-            int path[MAX_SEARCH_LEN];
+            int path[MAX_CYCLE_LENGTH];
             int num_threads=omp_get_num_threads();
             int thread_id=omp_get_thread_num();
-            find_mix_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX,&cur_large_cycles);
-            if (verbosity >0 ){
-                printf("Thread %4d of %4d, find %15ld(th) cycle's (%5d=<length<=%5d), %d large cycles\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH,cur_large_cycles);
-            }
-	}
-        printf("Find %15ld Cycles in the second search\n",cur_large_cycles);
-    }
+            find_fix_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX);
+        }
 
+        printf("Find %15ld Cycles in the first search\n",number_cycles);
+        if (number_cycles<ALL_CYCLE_NUM) {
+            cur_large_cycles=number_cycles;
+            #pragma omp parallel for reduction(+:cur_large_cycles) schedule(dynamic)
+            for (int i = 0; i < graph.num_nodes; i++) {
+                bool visited[MAX_NODES] = {false};
+                int path[MAX_SEARCH_LEN];
+                int num_threads=omp_get_num_threads();
+                int thread_id=omp_get_thread_num();
+                find_mix_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX,&cur_large_cycles);
+                if (verbosity >0 ){
+                    printf("Thread %4d of %4d, find %15ld(th) cycle's (%5d=<length<=%5d), %d large cycles\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH,cur_large_cycles);
+                }
+            }
+            printf("Find %15ld Cycles in the second search\n",cur_large_cycles);
+        }
+    } else {
+	    printf("search very large circles with length %d\n",MAX_SEARCH_LEN);
+            for (int i = 0; i < graph.num_nodes; i++) {
+                bool visited[MAX_NODES] = {false};
+                int path[MAX_SEARCH_LEN];
+                int num_threads=omp_get_num_threads();
+                int thread_id=omp_get_thread_num();
+                sequential_find_mix_cycles(&graph, i, i, 1, path, visited, &number_cycles,table,INT_MAX,&cur_large_cycles);
+                if (verbosity >0 ){
+                    printf("Thread %4d of %4d, find %15ld(th) cycle's (%5d=<length<=%5d), %d large cycles\n",thread_id,num_threads,number_cycles, MIN_CYCLE_LENGTH,MAX_CYCLE_LENGTH,cur_large_cycles);
+                }
+            }
+            printf("Find %15ld Cycles in the sequential search\n",cur_large_cycles);
+    }
 
 
     gettimeofday(&end, NULL);
@@ -522,38 +685,72 @@ int main(int argc, char * argv[]) {
     gettimeofday(&start, NULL);
     int number_edges=0;
     cur_large_cycles=0;
-    #pragma omp parallel for reduction(+:number_edges) schedule(dynamic)
-    for (int i = 0; i < graph.num_nodes; i++) {
-        bool visited[MAX_NODES] = {false};
-        int path[MAX_CYCLE_LENGTH];
-        mark_fix_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
-    }
-    printf("Mark %d removed edges in the first search\n",number_edges);
-    if (number_cycles<ALL_CYCLE_NUM) {
-	cur_large_cycles=number_cycles;
-        #pragma omp parallel for reduction(+:number_edges,cur_large_cycles) schedule(dynamic)
+    time(&start_time);
+    if ( MAX_SEARCH_LEN <= MAX_NODES ) {
+        #pragma omp parallel for reduction(+:number_edges) schedule(dynamic)
         for (int i = 0; i < graph.num_nodes; i++) {
             bool visited[MAX_NODES] = {false};
-            int path[MAX_SEARCH_LEN];
-            int num_threads=omp_get_num_threads();
-            int thread_id=omp_get_thread_num();
-            mark_mix_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&cur_large_cycles);
-	}
-        printf("Mark %d removed edges in the second search\n",number_edges);
+            int path[MAX_CYCLE_LENGTH];
+            mark_fix_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0);
+        }
+        printf("Mark %d removed edges in the first search\n",number_edges);
+        if (number_cycles<ALL_CYCLE_NUM) {
+            cur_large_cycles=number_cycles;
+            #pragma omp parallel for reduction(+:number_edges,cur_large_cycles) schedule(dynamic)
+            for (int i = 0; i < graph.num_nodes; i++) {
+                bool visited[MAX_NODES] = {false};
+                int path[MAX_SEARCH_LEN];
+                int num_threads=omp_get_num_threads();
+                int thread_id=omp_get_thread_num();
+                mark_mix_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&cur_large_cycles);
+	    }
+            printf("Mark %d removed edges in the second search\n",number_edges);
+        } 
+    } else {
+            for (int i = 0; i < graph.num_nodes; i++) {
+                bool visited[MAX_NODES] = {false};
+                int path[MAX_SEARCH_LEN];
+                int num_threads=omp_get_num_threads();
+                int thread_id=omp_get_thread_num();
+                sequential_mark_mix_removed_edges(&graph, i, i, 1, path, visited,&number_edges,table,INT_MAX,0,&cur_large_cycles);
+	    }
+            printf("Mark %d removed edges in the second search\n",number_edges);
     }
     gettimeofday(&end, NULL);
     seconds  = end.tv_sec  - start.tv_sec;
     useconds = end.tv_usec - start.tv_usec;
     elapsed = seconds + useconds/1000000.0;
     printf("Mark %d removed edges, Time taken: %f seconds\n\n",number_edges, elapsed);
+
+
+    int cycle_edge_num=0;
+    int cycle_edge_weight=0;
+    for (int i = 0; i < graph.num_edges; i++) {
+        if (cycle_edges[i] == true) {
+            cycle_edge_num+=1;
+            cycle_edge_weight+=graph.edges[i].weight;
+        }
+    }
+    int removed_edge_num=0;
+    int removed_edge_weight=0;
+    for (int i = 0; i < graph.num_edges; i++) {
+        if (removed_edges[i] == true) {
+            removed_edge_num+=1;
+            removed_edge_weight+=graph.edges[i].weight;
+        }
+    }
+    if (cycle_edge_weight>0) {
+        printf("removed weight percentage is %f, removed edge number percentage is %f \n",removed_edge_weight*1.0/(cycle_edge_weight*1.0)*100,removed_edge_num*1.0/(cycle_edge_num*1.0)*100);
+        printf("total cycle edge num is %d, weight is %d, removed edge num is %d, removed weight is %d\n",cycle_edge_num,cycle_edge_weight,removed_edge_num,removed_edge_weight);
+    }
     // Output removed edges to a file
     FILE* output_file = fopen(output_filename, "w");
     if (output_file == NULL) {
         printf("Error: Cannot open file %s for writing\n", output_filename);
         exit(1);
     }
-    int removed_edge_num=0;
-    int removed_edge_weight=0;
+    removed_edge_num=0;
+    removed_edge_weight=0;
     for (int i = 0; i < graph.num_edges; i++) {
         if (removed_edges[i] == true) {
             fprintf(output_file, "%ld,%ld,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
