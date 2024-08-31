@@ -9,4 +9,4 @@
 #SBATCH --ntasks-per-node=8
 #SBATCH --time=0-40:59:00  # D-HH:MM:SS
 #SBATCH --mem-per-cpu=250000M
-python ip3.py tmp.csv >>output.my.txt
+python ip3.py 
