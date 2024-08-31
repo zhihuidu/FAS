@@ -44,11 +44,6 @@ def find_cut_edges(graph, labels):
     return cut_edges
 
 
-# Calculate and print the total weight of the cut
-total_cut_weight = sum(weight for _, _, weight in cut_edges)
-print(f"Total weight of the cut edges: {total_cut_weight:.2f}")
-
-
 
 
 
@@ -489,18 +484,19 @@ def process_graph(file_path):
     last_removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
-    print(f"removed {num_removed} edges with degree >= 100")
+    #num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
+    #print(f"removed {num_removed} edges with degree >= 100")
 
     #removed_weight=read_removed_edges("removed.csv",edge_flag )
+    '''
     for u,v in edge_flag:
         if edge_flag[(u,v)]==0:
            removednum+=1
            removed_weight+=edge_weights[(u,v)]
     print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
-
-    shG=build_from_GraphAndFlag (G,edge_flag)
-
+'''
+    #shG=build_from_GraphAndFlag (G,edge_flag)
+    shG=G.copy()
 
 
 
@@ -536,26 +532,19 @@ def process_graph(file_path):
                  print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
 
-            percentage=0.80
-            heavyset=set()
-            if len(component)>1000:
-                heavyset= calculate_heavy_set(shG,percentage)
-                while len(heavyset)<heavysetsize:
-                    percentage-=0.05
-                    heavyset= calculate_heavy_set(shG,percentage)
-            print(f"Heavy set has {len(heavyset)} elements")
-
-            #while len(component) >subcomponentsize:
-            if len(component)>subcomponentsize:
-
-
+            if len(component)>=1000:
                   G_sub = G.subgraph(component).copy()
                   subgraphs, labels = spectral_clustering_divide(G_sub)
                   cut_edges = find_cut_edges(G_sub, labels)
+                  weight1=0
+                  num1=0
                   for u,v,w in cut_edges:
                       edge_flag[(u,v)]=0
-                      removed_weight+=edge_weights[(u,v)]
-
+                      num1+=1
+                      weight1+=edge_weights[(u,v)]
+                  print(f"split component into two parts and remove {num1} edges with {weight1} weight")
+                  removednum+=num1
+                  removed_weight+=weight1
             oldnum=removednum
             removednum=0
             actweight=0
@@ -565,7 +554,6 @@ def process_graph(file_path):
                     actweight+=edge_weights[(u,v)]
             print(f"{numcheckacyclic} check,to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
-            addnum=max(removednum-oldnum,1)
 
             current_time = datetime.now()
             time_string = current_time.strftime("%Y%m%d_%H%M%S")
