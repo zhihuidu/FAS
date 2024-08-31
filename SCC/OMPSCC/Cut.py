@@ -529,7 +529,7 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
 
-            if len(component)<200:
+            if len(component)<1000:
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
@@ -549,28 +549,12 @@ def process_graph(file_path):
             if len(component)>subcomponentsize:
 
 
-              for i in range(int(len(component)/subcomponentsize*5)):
-                   subnum += 1
-                   print(f"{numcheckacyclic} check, handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
-                   smallcom=random.sample(component, subcomponentsize)
-                   #component.difference_update(smallcom)
-                   smallcom=set(smallcom)
-                   mergeset=smallcom.union(heavyset)
-
-                   fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
-                   time_limit=read_time_limit("time_limit.csv")
-                   if time_limit==0:
-                       time_limit=5
-                   removed_weight1=ompdfs_remove_cycle_edges(mergeset, G, fixcyclelen, mincyclelen, numcycles,maxcyclelen,time_limit, edge_flag )
-                   removed_weight+=removed_weight1
-                   print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
-
-            else:
-                   removed_weight1=ompdfs_remove_cycle_edges(component, G, fixcyclelen, mincyclelen, numcycles,maxcyclelen, time_limit, edge_flag )
-                   removed_weight+=removed_weight1
-
-            print(f"basic subgraph size is {subcomponentsize}, cycle size is {fixcyclelen}, num of scc is {len(scc)}\n")
-            print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+                  G_sub = G.subgraph(component).copy()
+                  subgraphs, labels = spectral_clustering_divide(G_sub)
+                  cut_edges = find_cut_edges(G_sub, labels)
+                  for u,v,w in cut_edges:
+                      edge_flag[(u,v)]=0
+                      removed_weight+=edge_weights[(u,v)]
 
             oldnum=removednum
             removednum=0
@@ -582,13 +566,6 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check,to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
             addnum=max(removednum-oldnum,1)
-            if addnum < 50:
-                        subcomponentsize=min(subcomponentsize*2,len(component))
-                        maxcyclelen+=100
-                        if maxcyclelen>136648:
-                            maxcyclelen=136648
-                        heavysetsize+=50
-                        write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,heavysetsize,"subconfig.csv")
 
             current_time = datetime.now()
             time_string = current_time.strftime("%Y%m%d_%H%M%S")
