@@ -525,6 +525,10 @@ def process_graph(file_path):
                    print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, set size is {len(mergeset)}\n\n")
 
             else:
+                   fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+                   time_limit=read_time_limit("time_limit.csv")
+                   if time_limit==0:
+                       time_limit=5
                    removed_weight1=ompdfs_remove_cycle_edges(component, G, fixcyclelen, mincyclelen, numcycles,maxcyclelen, time_limit, edge_flag )
                    removed_weight+=removed_weight1
 
