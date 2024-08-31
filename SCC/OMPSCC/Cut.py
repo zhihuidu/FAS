@@ -16,6 +16,30 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
+
+FileNameHead="SCC-OMP-DFS"
+
+
+# Function to find the minimum cut using Edmonds-Karp algorithm
+def find_minimum_cut(graph, source, target):
+    # Compute the maximum flow and minimum cut
+    cut_value, partition = nx.minimum_cut(graph, source, target, capacity='weight', flow_func=nx.algorithms.flow.edmonds_karp)
+
+    reachable, non_reachable = partition
+    cut_edges = []
+
+    for u in reachable:
+        for v in graph[u]:
+            if v in non_reachable:
+                cut_edges.append((u, v, graph.edges[u, v]['weight']))
+
+    return cut_value, cut_edges, reachable, non_reachable
+
+
+
+
+
+
 # Function to perform spectral clustering on the graph
 def spectral_clustering_divide(graph, n_clusters=2):
     # Get the adjacency matrix with weights
@@ -48,7 +72,6 @@ def find_cut_edges(graph, labels):
 
 
 
-FileNameHead="SCC-OMP-DFS"
 
 #given a graph file in the csv format (each line is (source,destination, weight)), generate the graph data structure
 def build_ArrayDataStructure(csv_file_path):
@@ -534,8 +557,20 @@ def process_graph(file_path):
 
             if len(component)>=1000:
                   G_sub = G.subgraph(component).copy()
-                  subgraphs, labels = spectral_clustering_divide(G_sub)
-                  cut_edges = find_cut_edges(G_sub, labels)
+                  # Choose source and target nodes
+                  # To ensure a balanced cut, we select source and target that are far apart in the graph
+                  nodes = list(component)
+                  source = random.choice(nodes)
+                  target = random.choice(nodes)
+
+                  # Ensure the source and target are different and far apart
+                  while source == target or nx.shortest_path_length(G_sub, source=source, target=target) < len(nodes) / 2:
+                             target = random.choice(nodes)
+
+                  # Find the minimum cut
+                  cut_value, cut_edges, reachable, non_reachable = find_minimum_cut(graph, source, target)
+                  #subgraphs, labels = spectral_clustering_divide(G_sub)
+                  #cut_edges = find_cut_edges(G_sub, labels)
                   weight1=0
                   num1=0
                   for u,v,w in cut_edges:
