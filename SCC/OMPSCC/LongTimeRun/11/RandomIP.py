@@ -16,30 +16,7 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-
 FileNameHead="SCC-OMP-DFS"
-
-
-# Function to find the minimum cut using Edmonds-Karp algorithm
-def find_minimum_cut(graph, source, target):
-    # Compute the maximum flow and minimum cut
-    cut_value, partition = nx.minimum_cut(graph, source, target, capacity='weight', flow_func=nx.algorithms.flow.edmonds_karp)
-
-    reachable, non_reachable = partition
-    cut_edges = []
-
-    for u in reachable:
-        for v in graph[u]:
-            if v in non_reachable:
-                cut_edges.append((u, v, graph.edges[u, v]['weight']))
-
-    return cut_value, cut_edges, reachable, non_reachable
-
-
-
-
-
-
 # Function to perform spectral clustering on the graph
 def spectral_clustering_divide(graph, n_clusters=2):
     # Get the adjacency matrix with weights
@@ -66,7 +43,6 @@ def find_cut_edges(graph, labels):
         if labels[u] != labels[v]:
             cut_edges.append((u, v, data['weight']))
     return cut_edges
-
 
 
 
@@ -232,6 +208,8 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
+                    G.remove_edge(edge[0],edge[1])
                     num+=1
     return removed_weight
 
@@ -507,19 +485,18 @@ def process_graph(file_path):
     last_removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    #num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
-    #print(f"removed {num_removed} edges with degree >= 100")
+    num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
+    print(f"removed {num_removed} edges with degree >= 100")
 
     #removed_weight=read_removed_edges("removed.csv",edge_flag )
-    '''
     for u,v in edge_flag:
         if edge_flag[(u,v)]==0:
            removednum+=1
            removed_weight+=edge_weights[(u,v)]
     print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
-'''
-    #shG=build_from_GraphAndFlag (G,edge_flag)
-    shG=G.copy()
+
+    shG=build_from_GraphAndFlag (G,edge_flag)
+
 
 
 
@@ -548,39 +525,36 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
 
-            if len(component)<1000:
+            if len(component)<200:
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
                  print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
 
-            if len(component)>=1000:
-                  G_sub = G.subgraph(component).copy()
-                  # Choose source and target nodes
-                  # To ensure a balanced cut, we select source and target that are far apart in the graph
-                  nodes = list(component)
-                  source = random.choice(nodes)
-                  target = random.choice(nodes)
+            while len(component) >subcomponentsize:
 
-                  # Ensure the source and target are different and far apart
-                  while source == target or nx.shortest_path_length(G_sub, source=source, target=target) < len(nodes) / 2:
-                             target = random.choice(nodes)
+                   smallcom=random.sample(component, subcomponentsize)
+                   component.difference_update(smallcom)
 
-                  print(f"select source {source} and destination {target} to cut the SCC")
-                  # Find the minimum cut
-                  cut_value, cut_edges, reachable, non_reachable = find_minimum_cut(G_sub, source, target)
-                  #subgraphs, labels = spectral_clustering_divide(G_sub)
-                  #cut_edges = find_cut_edges(G_sub, labels)
-                  weight1=0
-                  num1=0
-                  for u,v,w in cut_edges:
-                      edge_flag[(u,v)]=0
-                      num1+=1
-                      weight1+=edge_weights[(u,v)]
-                  print(f"split component into two parts and remove {num1} edges with {weight1} weight")
-                  removednum+=num1
-                  removed_weight+=weight1
+                   G_sub = shG.subgraph(smallcom).copy()
+                   removed_weight1= solve_ip_scc(G_sub,edge_flag)
+                   removed_weight+=removed_weight1
+                   print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                   subnum += 1
+                   print(f"{numcheckacyclic} check, handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
+
+            if  1==1:
+                   G_sub = shG.subgraph(component).copy()
+                   removed_weight1= solve_ip_scc(G_sub,edge_flag)
+                   removed_weight+=removed_weight1
+                   print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                   subnum += 1
+                   print(f"{numcheckacyclic} check, handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
+
+            print(f"basic subgraph size is {subcomponentsize}, cycle size is {fixcyclelen}, num of scc is {len(scc)}\n")
+            print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+
             oldnum=removednum
             removednum=0
             actweight=0
@@ -590,6 +564,16 @@ def process_graph(file_path):
                     actweight+=edge_weights[(u,v)]
             print(f"{numcheckacyclic} check,to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
+            addnum=max(removednum-oldnum,1)
+            if addnum < 50:
+                        subcomponentsize=min(subcomponentsize*2,len(component))
+                        maxcyclelen+=100
+                        if maxcyclelen>136648:
+                            maxcyclelen=136648
+                        heavysetsize+=50
+                        if heavysetsize>len(component) /10:
+                            heavysetsize=int(len(component) /10)
+                        write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,heavysetsize,"subconfig.csv")
 
             current_time = datetime.now()
             time_string = current_time.strftime("%Y%m%d_%H%M%S")

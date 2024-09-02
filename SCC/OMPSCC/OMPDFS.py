@@ -166,6 +166,7 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
                     num+=1
     return removed_weight
 

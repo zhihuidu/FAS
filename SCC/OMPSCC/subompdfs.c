@@ -236,6 +236,7 @@ void read_graph_from_csv(const char* filename, Graph* graph,HashTable* table) {
 
 // Function to find cycles up to a maximum length
 void find_fix_cycles(Graph* graph, int start, int current, int length, int* path, bool* visited , long int * num_cycle, HashTable * table,int min_weight) {
+    int thread_id=omp_get_thread_num();
     if (length > MAX_CYCLE_LENGTH) return;
     time(&end_time);
     if (end_time-start_time>time_threshold) {
@@ -248,7 +249,6 @@ void find_fix_cycles(Graph* graph, int start, int current, int length, int* path
     EdgeInfo* out_edges = &graph->out_edge[current];
 
 
-    int thread_id=omp_get_thread_num();
     for (int i = 0; i < out_edges->count; i++) {
         int edge_index = out_edges->edges[i];
         Edge* edge = &mapped_edges[edge_index];
@@ -571,6 +571,7 @@ void sequential_mark_mix_removed_edges(Graph* graph, int start, int current, int
 int main(int argc, char * argv[]) {
     // run it like this ./ompdfs graphname [maxcyclelen verbersity mincyclelen numoflargecycles largestcyclelen]
     const char* input_filename = argv[1];
+    char * endptr;
     if (argc>2) {
          MAX_CYCLE_LENGTH=atoi(argv[2]);
          if (argc >3) {
@@ -583,7 +584,7 @@ int main(int argc, char * argv[]) {
 	    }
          }
          if (argc >5) {
-            ALL_CYCLE_NUM=atoi(argv[5]);
+            ALL_CYCLE_NUM=strtol(argv[5],&endptr,10);
          }
          if (argc >6) {
             MAX_SEARCH_LEN=atoi(argv[6]);
@@ -593,7 +594,7 @@ int main(int argc, char * argv[]) {
 
          }
          if (argc >7) {
-            time_threshold=atoi(argv[7]);
+            time_threshold=strtol(argv[7],&endptr,10);
          }
     } 
 
@@ -625,6 +626,7 @@ int main(int argc, char * argv[]) {
     useconds = end.tv_usec - start.tv_usec;
     elapsed = seconds + useconds/1000000.0;
     printf("Initial graph and read data taken: %f seconds\n\n", elapsed);
+    printf("MAX_CYCLE_LENGTH is %d, MIN_CYCLE_LENGTH is %d, ALL_CYCLE_NUM is %ld, MAX_SEARCH_LEN is %d, time_threshold is %d\n",MAX_CYCLE_LENGTH,MIN_CYCLE_LENGTH,ALL_CYCLE_NUM,MAX_SEARCH_LEN,time_threshold);
 
     gettimeofday(&start, NULL);
 

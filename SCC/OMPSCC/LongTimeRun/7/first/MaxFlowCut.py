@@ -33,7 +33,7 @@ def find_minimum_cut(graph, source, target):
             if v in non_reachable:
                 cut_edges.append((u, v, graph.edges[u, v]['weight']))
 
-    return cut_value, cut_edges, reachable, non_reachable
+    return cut_value, cut_edges 
 
 
 
@@ -44,12 +44,12 @@ def find_minimum_cut(graph, source, target):
 def spectral_clustering_divide(graph, n_clusters=2):
     # Get the adjacency matrix with weights
     adj_matrix = nx.to_numpy_array(graph, weight='weight')
-
+    node_list=list(graph.nodes())
     # Perform spectral clustering
     sc = SpectralClustering(n_clusters=n_clusters, affinity='precomputed',
                             assign_labels='discretize', random_state=42)
     labels = sc.fit_predict(adj_matrix)
-
+    node_to_label={node_list[i]:labels[i] for i in range(len(node_list))}
     # Create subgraphs for each cluster
     subgraphs = []
     for i in range(n_clusters):
@@ -57,13 +57,13 @@ def spectral_clustering_divide(graph, n_clusters=2):
         subgraph = graph.subgraph(nodes_in_cluster)
         subgraphs.append(subgraph)
 
-    return subgraphs, labels
+    return subgraphs, labels,node_to_label
 
 # Function to find and print the cut edges
-def find_cut_edges(graph, labels):
+def find_cut_edges(graph, labels,node_to_label):
     cut_edges = []
     for u, v, data in graph.edges(data=True):
-        if labels[u] != labels[v]:
+        if labels[node_to_label[u]] != labels[node_to_label[v]]:
             cut_edges.append((u, v, data['weight']))
     return cut_edges
 
@@ -198,7 +198,18 @@ def read_time_limit(file_path):
             csv_reader = csv.reader(f)
             for row in csv_reader:
                 time_limit=int(row[0])
-    return time_limit 
+    return time_limit
+
+def read_num_pairs(file_path):
+    numpairs=2
+    mindistance=5
+    if os.path.exists(file_path):
+        with open(file_path,mode='r') as f:
+            csv_reader = csv.reader(f)
+            for row in csv_reader:
+                numpairs=int(row[0])
+                mindistance=int(row[1])
+    return numpairs,mindistance 
 
 def write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,heavysetsize,file_path):
     with open(file_path, 'w') as f:
@@ -232,6 +243,7 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
                     num+=1
     return removed_weight
 
@@ -530,6 +542,7 @@ def process_graph(file_path):
     heavysetsize=200
     #reading from a file will allow us to change the value dynamically
     fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+    time_limit=read_time_limit("time_limit.csv")
 
     numcheckacyclic=0
     while not nx.is_directed_acyclic_graph(shG):
@@ -555,32 +568,67 @@ def process_graph(file_path):
                  print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                  continue
 
-            if len(component)>=1000:
+            if len(component)>=10000:
                   G_sub = G.subgraph(component).copy()
                   # Choose source and target nodes
                   # To ensure a balanced cut, we select source and target that are far apart in the graph
                   nodes = list(component)
-                  source = random.choice(nodes)
-                  target = random.choice(nodes)
+                  numpairs,mindistance =read_num_pairs("numpair.csv")
+                  
+                  fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+                  time_limit=read_time_limit("time_limit.csv")
+                  removed_weight1=ompdfs_remove_cycle_edges(component,G, fixcyclelen, mincyclelen, numcycles,maxcyclelen,time_limit,edge_flag)
+                  removed_weight+=removed_weight1
+                  j=len(nodes)
+                  for i in range(numpairs):
+                      source=nodes[i]
+                      j=j-1
+                      if j<=i:
+                          break
+                      target=nodes[j]
+                      distance=nx.shortest_path_length(G_sub,source=source,target=target)
+                      while  source==target or distance<mindistance:
+                          j=j-1
+                          if j>i:
+                              target=nodes[j]
+                          else:
+                              break
+                          distance=nx.shortest_path_length(G_sub,source=source,target=target)
+                          print(f"reselect target because of the short distance {distance} to target {j} is less than {mindistance}\n")
 
-                  # Ensure the source and target are different and far apart
-                  while source == target or nx.shortest_path_length(G_sub, source=source, target=target) < len(nodes) / 2:
-                             target = random.choice(nodes)
+                      print(f"The {i} th pair of {numpairs}  select source {source} and destination {target} with distance {distance}  to cut the SCC, min distance is {mindistance}")
+                      # Find the minimum cut
+                      cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
+                      cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
+                      weight1=0
+                      num1=0
+                      if cut_value1 < cut_value2:
+                          cut_edges=cut_edges1
+                      else:
+                          cut_edges=cut_edges2
+                      for u,v,w in cut_edges:
+                          edge_flag[(u,v)]=0
+                          num1+=1
+                          weight1+=edge_weights[(u,v)]
+                          G_sub.remove_edge(u,v)
+                      print(f"The {i}th  {source} and {target} remove {num1} edges with {weight1} weight\n")
+                      removednum+=num1
+                      removed_weight+=weight1
 
-                  print(f"select source {source} and destination {target} to cut the SCC")
-                  # Find the minimum cut
-                  cut_value, cut_edges, reachable, non_reachable = find_minimum_cut(G_sub, source, target)
-                  #subgraphs, labels = spectral_clustering_divide(G_sub)
-                  #cut_edges = find_cut_edges(G_sub, labels)
-                  weight1=0
-                  num1=0
-                  for u,v,w in cut_edges:
-                      edge_flag[(u,v)]=0
-                      num1+=1
-                      weight1+=edge_weights[(u,v)]
-                  print(f"split component into two parts and remove {num1} edges with {weight1} weight")
-                  removednum+=num1
-                  removed_weight+=weight1
+            else:
+                      
+                    fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+                    fixcyclelen=min(fixcyclelen,len(component))
+                    if numcycles<0:
+                        numcycles=100
+
+                    maxcyclelen=max(maxcyclelen,fixcyclelen)
+                    time_limit=read_time_limit("time_limit.csv")
+                    if time_limit==0:
+                       time_limit=5
+                    removed_weight1=ompdfs_remove_cycle_edges(component,G, fixcyclelen, mincyclelen, numcycles,maxcyclelen,time_limit,edge_flag)
+                    removed_weight+=removed_weight1
+
             oldnum=removednum
             removednum=0
             actweight=0

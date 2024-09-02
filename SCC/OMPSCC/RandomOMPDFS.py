@@ -16,6 +16,7 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
+FileNameHead="SCC-OMP-DFS"
 # Function to perform spectral clustering on the graph
 def spectral_clustering_divide(graph, n_clusters=2):
     # Get the adjacency matrix with weights
@@ -44,16 +45,9 @@ def find_cut_edges(graph, labels):
     return cut_edges
 
 
-# Calculate and print the total weight of the cut
-total_cut_weight = sum(weight for _, _, weight in cut_edges)
-print(f"Total weight of the cut edges: {total_cut_weight:.2f}")
 
 
 
-
-
-
-FileNameHead="SCC-OMP-DFS"
 
 #given a graph file in the csv format (each line is (source,destination, weight)), generate the graph data structure
 def build_ArrayDataStructure(csv_file_path):
@@ -214,6 +208,7 @@ def solve_ip_scc(G,edge_flag):
             if var.x > 0.5:
                if edge_flag[(edge[0],edge[1])]==1:
                     removed_weight+=G[edge[0]][edge[1]]['weight']
+                    edge_flag[(edge[0],edge[1])]=0
                     num+=1
     return removed_weight
 
@@ -592,6 +587,8 @@ def process_graph(file_path):
                         if maxcyclelen>136648:
                             maxcyclelen=136648
                         heavysetsize+=50
+                        if heavysetsize>len(component) /10:
+                            heavysetsize=int(len(component) /10)
                         write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,heavysetsize,"subconfig.csv")
 
             current_time = datetime.now()
