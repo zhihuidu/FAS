@@ -628,6 +628,7 @@ int main(int argc, char * argv[]) {
     printf("Initial graph and read data taken: %f seconds\n\n", elapsed);
     printf("MAX_CYCLE_LENGTH is %d, MIN_CYCLE_LENGTH is %d, ALL_CYCLE_NUM is %ld, MAX_SEARCH_LEN is %d, time_threshold is %d\n",MAX_CYCLE_LENGTH,MIN_CYCLE_LENGTH,ALL_CYCLE_NUM,MAX_SEARCH_LEN,time_threshold);
 
+    printf("num of vertices   %d, num of edges is %d\n",graph.num_nodes,graph.num_edges);
     gettimeofday(&start, NULL);
 
     // Find cycles and update weights

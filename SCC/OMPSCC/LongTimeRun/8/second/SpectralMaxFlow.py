@@ -33,7 +33,7 @@ def find_minimum_cut(graph, source, target):
             if v in non_reachable:
                 cut_edges.append((u, v, graph.edges[u, v]['weight']))
 
-    return cut_value, cut_edges, reachable, non_reachable
+    return cut_value, cut_edges 
 
 
 

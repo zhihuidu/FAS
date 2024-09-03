@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 FileNameHead="SCC-OMP-DFS"
 
 
-
 # Function to find the minimum cut using Edmonds-Karp algorithm
 def find_minimum_cut(graph, source, target):
     # Compute the maximum flow and minimum cut
@@ -34,7 +33,6 @@ def find_minimum_cut(graph, source, target):
                 cut_edges.append((u, v, graph.edges[u, v]['weight']))
 
     return cut_value, cut_edges
-
 
 
 
@@ -207,6 +205,7 @@ num=0
 #remove cycle in G and update edge_flag
 def solve_ip_scc(G,edge_flag,SuperG):
     global num
+    print(f"num of nodes is {G.number_of_nodes()}, num of edges is {G.number_of_edges()}\n")
     removed_weight=0
     model = gp.Model("min_feedback_arc_set")
     model.setParam('OutputFlag', 0)  # Silent mode
@@ -256,7 +255,10 @@ def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,len_long_cy
                f.write(f"{u},{v},{data['weight']}\n")
     # search cycles in the subgraph
     commandline=f"./subompdfs tmp-omp-file.csv {maxlen} 0 {minlen} {num_long_cycles} {len_long_cycle} {time_limit}"
-    os.system(commandline)
+    if os.system(commandline)!=0 :
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        print("There is an error during call subompdfs")
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
 
     if os.path.exists("tmp-omp-removed-edges.csv"):
         with open("tmp-omp-removed-edges.csv",mode='r') as f:
@@ -507,8 +509,8 @@ def process_graph(file_path):
     last_removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
-    print(f"removed {num_removed} edges with degree >= 100")
+    #num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
+    #print(f"removed {num_removed} edges with degree >= 100")
 
     #removed_weight=read_removed_edges("removed.csv",edge_flag )
     for u,v in edge_flag:
@@ -532,6 +534,8 @@ def process_graph(file_path):
 
     numcheckacyclic=0
     while not nx.is_directed_acyclic_graph(shG):
+        fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+        time_limit=read_time_limit("time_limit.csv")
         print("the graph is not a DAG. Finding strongly connected components")
         scc=list(nx.strongly_connected_components(shG))
         print(f"number of scc is {len(scc)}")
@@ -561,21 +565,23 @@ def process_graph(file_path):
                    component.difference_update(smallcom)
 
                    G_sub = shG.subgraph(smallcom).copy()
-                   removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
+                   removed_weight1= ompdfs_remove_cycle_edges(smallcom,shG, fixcyclelen,mincyclelen,numcycles,maxcyclelen,time_limit,edge_flag)
                    removed_weight+=removed_weight1
                    print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                    subnum += 1
                    print(f"{numcheckacyclic} check, handle the {subnum}th random part of {numcomponent}th component with size {len(component)}")
-                   if subnum>1 and removed_weight1 <3:
-                        smallcom=list(smallcom)
+                   if subnum>1 and removed_weight1 <10:
                         print("MaxFlow check source and target")
+                        #nG=build_from_subvertexset(shG,lastsubcomponent.union(smallcom),edge_flag) 
+                        nG=shG.subgraph(lastsubcomponent.union(smallcom)).copy()
+                        smallcom=list(smallcom)
+                        lastsubcomponent=list(lastsubcomponent)
                         for i in range(subcomponentsize):
                             source=lastsubcomponent[i]
                             target=smallcom[i]
-                            if nx.has_path(shG,source,target):
-                                if nx.shortest_path_length(shG,source=source,target=target) >0:
-                                      cut_value1, cut_edges1 = find_minimum_cut(shG, source, target)
-                                      cut_value2, cut_edges2 = find_minimum_cut(shG, target, source)
+                            if nx.has_path(nG,source,target) and nx.has_path(nG,target,source):
+                                      cut_value1, cut_edges1 = find_minimum_cut(nG, source, target)
+                                      cut_value2, cut_edges2 = find_minimum_cut(nG, target, source)
                                       weight1=0
                                       num1=0
                                       if cut_value1 < cut_value2:
@@ -594,7 +600,8 @@ def process_graph(file_path):
 
             if  1==1:
                    G_sub = shG.subgraph(component).copy()
-                   removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
+                   removed_weight1= ompdfs_remove_cycle_edges(smallcom,shG, fixcyclelen,mincyclelen,numcycles,maxcyclelen,time_limit,edge_flag)
+
                    removed_weight+=removed_weight1
                    print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                    subnum += 1
@@ -602,6 +609,17 @@ def process_graph(file_path):
 
             print(f"basic subgraph size is {subcomponentsize}, cycle size is {fixcyclelen}, num of scc is {len(scc)}\n")
             print(f"removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n\n")
+            
+            if numcheckacyclic %50==0:
+                fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
+                time_limit=read_time_limit("time_limit.csv")
+            
+                if fixcyclelen>len(shG.nodes()):
+                    fixcyclelen=min(len(shG.nodes()),80000)
+                maxcyclelen=fixcyclelen
+                if len(shG.nodes())>10000:
+                    smallcom=random.sample(shG.nodes(), 10000)
+                ompdfs_remove_cycle_edges(smallcom,shG, fixcyclelen,mincyclelen,numcycles,maxcyclelen,time_limit,edge_flag)
 
             oldnum=removednum
             removednum=0
@@ -612,6 +630,7 @@ def process_graph(file_path):
                     actweight+=edge_weights[(u,v)]
             print(f"{numcheckacyclic} check,to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
 
+            '''
             addnum=max(removednum-oldnum,1)
             if addnum < 50:
                         subcomponentsize=min(subcomponentsize*2,len(component))
@@ -622,7 +641,7 @@ def process_graph(file_path):
                         if heavysetsize>len(component) /10:
                             heavysetsize=int(len(component) /10)
                         write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,heavysetsize,"subconfig.csv")
-
+'''
             current_time = datetime.now()
             time_string = current_time.strftime("%Y%m%d_%H%M%S")
             output_file = f"{FileNameHead}-removed-edges-{time_string}.csv"
