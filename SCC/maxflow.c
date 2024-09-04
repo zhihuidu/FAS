@@ -75,24 +75,6 @@ void addEdge(struct Graph* graph, int from, int to, int capacity) {
 }
 
 
-
-
-
-
-
-// Function to add an edge to the graph
-void addEdge(struct Graph* graph, int from, int to, int capacity) {
-    // Add an edge from `from` to `to`
-    struct AdjListNode* newNode = newAdjListNode(to, capacity);
-    newNode->next = graph->array[from].head;
-    graph->array[from].head = newNode;
-
-    // Also add the reverse edge with 0 capacity (for residual graph)
-    newNode = newAdjListNode(from, 0);
-    newNode->next = graph->array[to].head;
-    graph->array[to].head = newNode;
-}
-
 // A utility function to perform BFS and find if there is a path from source to sink
 bool bfs(struct Graph* graph, int s, int t, int parent[]) {
     bool visited[graph->V];
