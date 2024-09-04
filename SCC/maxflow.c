@@ -15,15 +15,11 @@ int    verbosity=0;
 time_t start_time,end_time;
 int time_threshold=15;
 
-// Structure to represent an edge
-struct Edge {
-    int to, capacity, flow;
-    struct Edge* next;
-};
+
 
 // Structure to represent an adjacency list node
 struct AdjListNode {
-    int to, capacity, flow;
+    int to, capacity, flow, saved_flow;
     struct AdjListNode* next;
 };
 
@@ -41,13 +37,10 @@ struct Graph {
 // Function to create a new adjacency list node
 struct AdjListNode* newAdjListNode(int to, int capacity) {
     struct AdjListNode* newNode = (struct AdjListNode*)malloc(sizeof(struct AdjListNode));
-    if (newNode==NULL) {
-        printf("memory allocation error\n");
-        exit(0);
-    }
     newNode->to = to;
     newNode->capacity = capacity;
     newNode->flow = 0;
+    newNode->saved_flow = 0;  // New field to save flow
     newNode->next = NULL;
     return newNode;
 }
@@ -67,6 +60,25 @@ struct Graph* createGraph(int V) {
 
     return graph;
 }
+
+// Function to add an edge to the graph
+void addEdge(struct Graph* graph, int from, int to, int capacity) {
+    // Add an edge from `from` to `to`
+    struct AdjListNode* newNode = newAdjListNode(to, capacity);
+    newNode->next = graph->array[from].head;
+    graph->array[from].head = newNode;
+
+    // Also add the reverse edge with 0 capacity (for residual graph)
+    newNode = newAdjListNode(from, 0);
+    newNode->next = graph->array[to].head;
+    graph->array[to].head = newNode;
+}
+
+
+
+
+
+
 
 // Function to add an edge to the graph
 void addEdge(struct Graph* graph, int from, int to, int capacity) {
@@ -161,6 +173,30 @@ int edmondsKarp(struct Graph* graph, int s, int t) {
 
     return max_flow;
 }
+
+// Function to reset all flows to 0 in the graph before running the second max flow
+void resetFlows(struct Graph* graph) {
+    for (int u = 0; u < graph->V; u++) {
+        struct AdjListNode* node = graph->array[u].head;
+        while (node != NULL) {
+            node->flow = 0;
+            node = node->next;
+        }
+    }
+}
+
+// Function to save the flow for future restoration
+void saveFlows(struct Graph* graph) {
+    for (int u = 0; u < graph->V; u++) {
+        struct AdjListNode* node = graph->array[u].head;
+        while (node != NULL) {
+            node->saved_flow = node->flow;  // Save the current flow
+            node = node->next;
+        }
+    }
+}
+
+
 
 // Function to find the minimum cut using the residual graph
 void minCut(struct Graph* graph, int s, int t,int maxflow,char * output_filename) {
@@ -278,13 +314,27 @@ int main(int argc, char * argv[]) {
     int maxflow1= edmondsKarp(graph, source_v, dest_v);
     printf("The maximum flow 1 is %d\n", maxflow1);
 
-    // Find minimum cut
-    minCut(graph, source_v, dest_v,maxflow1, output_filename);
+
+
+
+
+
+    // Save flows after first max flow
+    saveFlows(graph);
+
+    // Reset flows
+    resetFlows(graph);
+
+
 
     int maxflow2= edmondsKarp(graph, dest_v,source_v);
     printf("The maximum flow 2 is %d\n", maxflow2);
     if (maxflow2<maxflow1) {
         minCut(graph, dest_v,source_v, maxflow2, output_filename);
+    } else {
+        printf("Min cut based on flow from source to destination:\n");
+        restoreFlows(graph);  
+        minCut(graph, source_v, dest_v,maxflow1, output_filename);
     }
     time(&end_time);
     printf("The maximum flow takes  %d second\n", end_time-start_time);
