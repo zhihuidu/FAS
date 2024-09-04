@@ -566,21 +566,18 @@ def process_graph(file_path):
             while len(component) >subcomponentsize:
 
                    smallcom=random.sample(component, subcomponentsize)
-                   component.difference_update(smallcom)
                    baksmallcom=smallcom.copy()
+                   component.difference_update(smallcom)
                    G_sub = shG.subgraph(smallcom).copy()
-
-                   sum0= solve_ip_scc(G_sub,edge_flag,shG)
-                   print(f"sum0={sum0}, total sum1={totalsum0}")
-
-
-
-
+                   edge_copy=edge_flag.copy()
+                   sum0= solve_ip_scc(G_sub,edge_copy,G_sub)
 
                    sum1=0
+                   print(f"sum0={sum0}, total sum0={totalsum0}")
                    G_sub = shG.subgraph(smallcom).copy()
+                   edge_copy=edge_flag.copy()
                    while not nx.is_directed_acyclic_graph(G_sub):
-                       removed_weight1= ompdfs_remove_cycle_edges(smallcom,G_sub, fixcyclelen,mincyclelen,numcycles,maxcyclelen,time_limit,edge_flag)
+                       removed_weight1= ompdfs_remove_cycle_edges(smallcom,G_sub, fixcyclelen,mincyclelen,numcycles,maxcyclelen,time_limit,edge_copy)
                        sum1+=removed_weight1
 
                    print(f"sum1={sum1}, total sum1={totalsum1}")

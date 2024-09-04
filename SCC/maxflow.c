@@ -1,9 +1,19 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <string.h>
+
+#include <stdbool.h>
+#include <omp.h>
+#include <stdatomic.h>
+#include <sys/time.h>
+#include <time.h>
+
+
+int    verbosity=0;
+time_t start_time,end_time;
+int time_threshold=15;
 
 // Structure to represent an edge
 struct Edge {
@@ -31,6 +41,10 @@ struct Graph {
 // Function to create a new adjacency list node
 struct AdjListNode* newAdjListNode(int to, int capacity) {
     struct AdjListNode* newNode = (struct AdjListNode*)malloc(sizeof(struct AdjListNode));
+    if (newNode==NULL) {
+        printf("memory allocation error\n");
+        exit(0);
+    }
     newNode->to = to;
     newNode->capacity = capacity;
     newNode->flow = 0;
@@ -149,7 +163,7 @@ int edmondsKarp(struct Graph* graph, int s, int t) {
 }
 
 // Function to find the minimum cut using the residual graph
-void minCut(struct Graph* graph, int s, int t) {
+void minCut(struct Graph* graph, int s, int t,int maxflow,char * output_filename) {
     bool visited[graph->V];
     memset(visited, 0, sizeof(visited));
 
@@ -171,17 +185,26 @@ void minCut(struct Graph* graph, int s, int t) {
         }
     }
 
-    printf("The minimum cut edges are:\n");
+    // Output removed edges to a file
+    FILE* output_file = fopen(output_filename, "w");
+    if (output_file == NULL) {
+        printf("Error: Cannot open file %s for writing\n", output_filename);
+        exit(1);
+    }
+    fprintf(output_file, "%d\n", maxflow);
+    //printf("The minimum cut edges are:\n");
     for (int u = 0; u < graph->V; u++) {
         struct AdjListNode* node = graph->array[u].head;
         while (node != NULL) {
             int v = node->to;
             if (visited[u] && !visited[v] && node->capacity > 0) {
-                printf("%d - %d (Capacity: %d)\n", u, v, node->capacity);
+                //printf("%d - %d (Capacity: %d)\n", u, v, node->capacity);
+                fprintf(output_file, "%d,%d,%d\n", u, v,node->capacity);
             }
             node = node->next;
         }
     }
+    fclose(output_file);
 }
 
 // Function to read graph data from a CSV file
@@ -193,26 +216,82 @@ void readGraphFromCSV(const char* filename, struct Graph* graph) {
     }
 
     int from, to, capacity;
-    while (fscanf(file, "%d,%d,%d", &from, &to, &capacity) == 3) {
+    while (fscanf(file, "%d,%d,%d\n", &from, &to, &capacity) !=EOF) {
         addEdge(graph, from, to, capacity);
     }
 
     fclose(file);
 }
 
-int main() {
+
+
+
+int main(int argc, char * argv[]) {
+    // run it like this ./ompdfs graphname [maxcyclelen verbersity mincyclelen numoflargecycles largestcyclelen]
+    const char* input_filename = argv[1];
     int V = 6;  // Number of vertices (adjust based on your input file)
+    char * endptr;
+    int source_v,dest_v;
+  
+    if (argc>2) {
+         V=atoi(argv[2]);
+         if (argc >3) {
+            verbosity=atoi(argv[3]);
+         }
+         if (argc >4) {
+            source_v=atoi(argv[4]);
+         }
+         if (argc >5) {
+            dest_v=atoi(argv[5]);
+         }
+         if (argc >6) {
+            time_threshold=atoi(argv[6]);
+         }
+    } 
+
+    struct timeval start, end;
+    long seconds, useconds;
+    double elapsed;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    time(&start_time);
+    // Create a filename with the timestamp
+    char * output_filename="tmp-maxflow-removed-edges.csv";
+
+
+    printf("-------------------------------------------------------------\n");
+    printf("MaxFlow Subroutine started");
+    printf("read file name=%s, writefile name=%s\n",input_filename,output_filename);
+
     struct Graph* graph = createGraph(V);
 
     // Read graph from CSV file
-    readGraphFromCSV("graph_data.csv", graph);
+    readGraphFromCSV(input_filename, graph);
 
+
+    time(&end_time);
+    printf("read file takes  %d seconds\n", end_time-start_time);
+    time(&start_time);
     // Run Edmonds-Karp algorithm
-    printf("The maximum flow is %d\n", edmondsKarp(graph, 0, 5));
+    int maxflow1= edmondsKarp(graph, source_v, dest_v);
+    printf("The maximum flow 1 is %d\n", maxflow1);
 
     // Find minimum cut
-    minCut(graph, 0, 5);
+    minCut(graph, source_v, dest_v,maxflow1, output_filename);
 
+    int maxflow2= edmondsKarp(graph, dest_v,source_v);
+    printf("The maximum flow 2 is %d\n", maxflow2);
+    if (maxflow2<maxflow1) {
+        minCut(graph, dest_v,source_v, maxflow2, output_filename);
+    }
+    time(&end_time);
+    printf("The maximum flow takes  %d second\n", end_time-start_time);
+
+
+    printf("-------------------------------------------------------------\n");
     return 0;
 }
+
 
