@@ -65,18 +65,34 @@ struct Graph* createGraph(int V) {
     return graph;
 }
 
-// Function to add an edge to the graph
+
+// Function to add an edge to the graph, avoiding duplicate reverse edges
 void addEdge(struct Graph* graph, int from, int to, int capacity) {
-    // Add an edge from `from` to `to`
+    // Add the forward edge from `from` to `to`
     struct AdjListNode* newNode = newAdjListNode(to, capacity);
     newNode->next = graph->array[from].head;
     graph->array[from].head = newNode;
 
-    // Also add the reverse edge with 0 capacity (for residual graph)
-    newNode = newAdjListNode(from, 0);
-    newNode->next = graph->array[to].head;
-    graph->array[to].head = newNode;
+    // Check if the reverse edge (from `to` to `from`) already exists
+    struct AdjListNode* reverseNode = graph->array[to].head;
+    bool reverseExists = false;
+    while (reverseNode != NULL) {
+        if (reverseNode->to == from) {
+            reverseExists = true;
+            break;
+        }
+        reverseNode = reverseNode->next;
+    }
+
+    // Only add the reverse edge with 0 capacity if it doesn't already exist
+    if (!reverseExists) {
+        newNode = newAdjListNode(from, 0); // Reverse edge with 0 capacity
+        newNode->next = graph->array[to].head;
+        graph->array[to].head = newNode;
+    }
 }
+
+
 
 // Utility function to perform BFS and find if there is a path from source to sink
 bool bfs(struct Graph* graph, int s, int t, int parent[]) {
