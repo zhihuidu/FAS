@@ -156,6 +156,8 @@ int edmondsKarp(struct Graph* graph, int s, int t) {
     return max_flow;
 }
 
+
+
 // Function to reset all flows to 0 in the graph before running the second max flow
 void resetFlows(struct Graph* graph) {
     for (int u = 0; u < graph->V; u++) {
@@ -177,6 +179,20 @@ void saveFlows(struct Graph* graph) {
         }
     }
 }
+
+// Function to restore the flow after computing the second max flow
+void restoreFlows(struct Graph* graph) {
+    for (int u = 0; u < graph->V; u++) {
+        struct AdjListNode* node = graph->array[u].head;
+        while (node != NULL) {
+            node->flow = node->saved_flow;  // Restore the saved flow
+            node = node->next;
+        }
+    }
+}
+
+
+
 
 
 
