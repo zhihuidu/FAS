@@ -596,7 +596,7 @@ def process_graph(file_path):
             subnum=0
 
 
-            if len(component)<1000:
+            if len(component)<500:
                  G_sub = shG.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
                  removed_weight+=removed_weight1
@@ -607,9 +607,11 @@ def process_graph(file_path):
             totalsum1=0
             totalsum2=0
             totalsum0=0
-            if  len(component) >1000:
+            if  len(component) >=500:
                         G_sub = shG.subgraph(component).copy()
+                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
                         numpair,distance=read_num_pairs("numpair.csv")
+                        numpair=min(numpair,int(len(component)/2-1))
                         percentage=0.8
                         heavyset =calculate_heavy_set(G_sub,percentage)
                         while len(heavyset)<2* numpair:

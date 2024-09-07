@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Light-SCC-OMP-DFS"
+FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
 
 
 
@@ -598,6 +598,7 @@ def process_graph(file_path):
 
             if len(component)<1000:
                  G_sub = shG.subgraph(component).copy()
+
                  try:
                      removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
                      removed_weight+=removed_weight1
@@ -607,36 +608,39 @@ def process_graph(file_path):
                      print(f"Caught an error  {e}")
 
 
+
+
+
+
+
+
+
             totalsum1=0
             totalsum2=0
             totalsum0=0
-            if  len(component) >=1000:
+            #if  len(component) >=1000:
+            if  1==1:
                         G_sub = shG.subgraph(component).copy()
-
-                        print("number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
-
-                        numpair,distance=read_num_pairs("numpair.csv")
-                        percentage=1.01
-                        lightset =calculate_light_set(G_sub,percentage)
-                        while len(lightset)<2* numpair:
-                            percentage+=0.1
-                            lightset =calculate_light_set(G_sub,percentage)
-                        print("select small degree vertices")
+                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
+                        #numpair,distance=read_num_pairs("numpair.csv")
+                        numpair=int(len(component)/2-1)
+                        heavyset=list(component)
+                        l=len(heavyset)
+                        for s in range(numpair):
+                            G_sub.add_edge(0,heavyset[s],weight=float('inf'))
+                            G_sub.add_edge(heavyset[s],0,weight=float('inf'))
+                            G_sub.add_edge(heavyset[l-s-1],1,weight=float('inf'))
+                            G_sub.add_edge(1, heavyset[l-s-1],weight=float('inf'))
                         sum2=0
-                      
-                        l=len(lightset)
                         start_time=time.time()
-                        for i in range(numpair):
-                            if time.time()-start_time>time_limit:
-                                  break
-                            lightset=list(lightset)
-                            target=lightset[i]
-                            source=lightset[l-i-1]
+                        target=1
+                        source=0
 
-                            if source!=target and nx.has_path(G_sub,source,target) and nx.has_path(G_sub,target,source):
-                                      distance1=nx.shortest_path_length(G_sub,source=source,target=target)
-                                      distance2=nx.shortest_path_length(G_sub,target=source,source=target)
-                                      print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
+                        if 1==1:
+
+                                      #distance1=nx.shortest_path_length(G_sub,source=source,target=target)
+                                      #distance2=nx.shortest_path_length(G_sub,target=source,source=target)
+                                      #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
                                       cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
                                       print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}") 
@@ -647,11 +651,15 @@ def process_graph(file_path):
                                       else:
                                           cut_edges=cut_edges2
                                       for u,v,w in cut_edges:
+
+                                          if u==0 or v==0 or u==1 or v==1:
+                                               continue
+
                                           edge_flag[(u,v)]=0
-                                          G_sub.remove_edge(u,v)
                                           num1+=1
                                           weight1+=edge_weights[(u,v)]
                                       sum2+=weight1
+
                         removed_weight+=sum2
                         print(f"The {numcomponent}th component, removed weight is {sum2}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
 

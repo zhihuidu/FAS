@@ -16,7 +16,8 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Light-SCC-OMP-DFS"
+FileNameHead="Random-SCC-OMP-DFS"
+
 
 
 
@@ -30,7 +31,6 @@ def read_num_pairs(file_path):
                 numpairs=int(row[0])
                 mindistance=int(row[1])
     return numpairs,mindistance
-
 
 # Function to find the minimum cut using Edmonds-Karp algorithm
 def find_minimum_cut(graph, source, target):
@@ -283,6 +283,7 @@ def ompdfs_remove_cycle_edges(nodes,G, maxlen,minlen,num_long_cycles,len_long_cy
                 if edge_flag[(source,dest)]==1:
                     edge_flag[(source,dest)]=0
                     removed_weight+=weight
+                    G.remove_edge(source,dest)
                     num+=1
     return removed_weight 
 
@@ -445,41 +446,11 @@ def calculate_stats(distribution):
     above_4_3 = sum(k for k, v in distribution.items() if k>val_4_3) 
     return min_val, max_val, avg_val/total_key, mid_val, above_mid, val_4_3, above_4_3
 
-def select_heavy_node(dic,stats,percentage,heavyset):
+def select_node(dic,stats,percentage,heavyset):
      for node in dic:
         if dic[node]>stats[1] * percentage:
              heavyset.add(node)
      
-def select_light_node(dic,stats,percentage,lightset):
-     for node in dic:
-        if dic[node]<stats[0] * percentage:
-             lightset.add(node)
-
-def calculate_light_set(G,percentage):
-    # Calculate in-degree, out-degree, in-weight, and out-weight
-    in_degrees = dict(G.in_degree())
-    out_degrees = dict(G.out_degree())
-    in_weights = {node: sum(data['weight'] for _, _, data in G.in_edges(node, data=True)) for node in G.nodes()}
-    out_weights = {node: sum(data['weight'] for _, _, data in G.out_edges(node, data=True)) for node in G.nodes()}
-
-    # Calculate the distributions
-    in_degree_distribution = Counter(in_degrees.values())
-    out_degree_distribution = Counter(out_degrees.values())
-    in_weight_distribution = Counter(in_weights.values())
-    out_weight_distribution = Counter(out_weights.values())
-
-    in_degree_stats = calculate_stats(in_degree_distribution)
-    out_degree_stats = calculate_stats(out_degree_distribution)
-    in_weight_stats = calculate_stats(in_weight_distribution)
-    out_weight_stats = calculate_stats(out_weight_distribution)
-
-    lightset=set()
-    select_light_node(in_degrees, in_degree_stats, percentage, lightset)
-    select_light_node(out_degrees, out_degree_stats, percentage, lightset)
-    #select_light_node(in_weights, in_weight_stats, percentage, lightset)
-    #select_light_node(out_weights, out_weight_stats, percentage, lightset)
-    return lightset
-
 def calculate_heavy_set(G,percentage):
     # Calculate in-degree, out-degree, in-weight, and out-weight
     in_degrees = dict(G.in_degree())
@@ -499,10 +470,10 @@ def calculate_heavy_set(G,percentage):
     out_weight_stats = calculate_stats(out_weight_distribution)
 
     heavyset=set()
-    select_heavy_node(in_degrees, in_degree_stats, percentage, heavyset)
-    select_heavy_node(out_degrees, out_degree_stats, percentage, heavyset)
-    #select_heavy_node(in_weights, in_weight_stats, percentage, heavyset)
-    #select_heavy_node(out_weights, out_weight_stats, percentage, heavyset)
+    select_node(in_degrees, in_degree_stats, percentage, heavyset)
+    select_node(out_degrees, out_degree_stats, percentage, heavyset)
+    #select_node(in_weights, in_weight_stats, percentage, heavyset)
+    #select_node(out_weights, out_weight_stats, percentage, heavyset)
     return heavyset
 
 
@@ -595,9 +566,9 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
 
-
             if len(component)<1000:
                  G_sub = shG.subgraph(component).copy()
+
                  try:
                      removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
                      removed_weight+=removed_weight1
@@ -607,39 +578,52 @@ def process_graph(file_path):
                      print(f"Caught an error  {e}")
 
 
+
+
+
+            lastsubcomponent=set()
             totalsum1=0
             totalsum2=0
             totalsum0=0
-            if  len(component) >=1000:
+            #if  len(component) >1000:
+            if  1==1:
                         G_sub = shG.subgraph(component).copy()
 
-                        print("number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
+                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
 
                         numpair,distance=read_num_pairs("numpair.csv")
-                        percentage=1.01
-                        lightset =calculate_light_set(G_sub,percentage)
-                        while len(lightset)<2* numpair:
-                            percentage+=0.1
-                            lightset =calculate_light_set(G_sub,percentage)
-                        print("select small degree vertices")
+                        numpair=min(numpair,int(len(component)/2-1))
                         sum2=0
-                      
-                        l=len(lightset)
                         start_time=time.time()
+                        print(f"Randomly select vertex set with {numpair} pairs of vertices for maxflow")
+                        sourcelist=[]
+                        targetlist=[]
                         for i in range(numpair):
-                            if time.time()-start_time>time_limit:
-                                  break
-                            lightset=list(lightset)
-                            target=lightset[i]
-                            source=lightset[l-i-1]
+                            target=random.choice(list(component))
+                            source=random.choice(list(component))
 
                             if source!=target and nx.has_path(G_sub,source,target) and nx.has_path(G_sub,target,source):
-                                      distance1=nx.shortest_path_length(G_sub,source=source,target=target)
-                                      distance2=nx.shortest_path_length(G_sub,target=source,source=target)
-                                      print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
-                                      cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
-                                      cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
-                                      print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}") 
+                                      #distance1=nx.shortest_path_length(G_sub,source=source,target=target)
+                                      #distance2=nx.shortest_path_length(G_sub,target=source,source=target)
+                                      #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
+                                      G_sub.add_edge(0,source,weight=99999999)
+                                      G_sub.add_edge(target,1,weight=99999999)
+                                      sourcelist.append(source)
+                                      targetlist.append(target)
+                        cut_value1=0
+                        cut_edges1=[]
+                        if 1==1:
+                                      cut_value1, cut_edges1 = find_minimum_cut(G_sub, 0, 1)
+
+                        for i in range(len(sourcelist)):
+                                      G_sub.remove_edge(0,sourcelist[i])
+                                      G_sub.remove_edge(targetlist[i],1)
+                                      G_sub.add_edge(1, targetlist[i],weight=99999999)
+                                      G_sub.add_edge(sourcelist[i],0,weight=99999999)
+                        if 1==1:
+                                      cut_value2, cut_edges2 = find_minimum_cut(G_sub, 1, 0)
+                                      print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}")
+
                                       weight1=0
                                       num1=0
                                       if cut_value1 < cut_value2:
@@ -647,15 +631,15 @@ def process_graph(file_path):
                                       else:
                                           cut_edges=cut_edges2
                                       for u,v,w in cut_edges:
+                                          if u==0 or v==0 or u==1 or v==1:
+                                              continue
                                           edge_flag[(u,v)]=0
-                                          G_sub.remove_edge(u,v)
+                                          shG.remove_edge(u,v)
                                           num1+=1
                                           weight1+=edge_weights[(u,v)]
                                       sum2+=weight1
                         removed_weight+=sum2
                         print(f"The {numcomponent}th component, removed weight is {sum2}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
-
-
 
             oldnum=removednum
             removednum=0

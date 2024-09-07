@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Light-SCC-OMP-DFS"
+FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
 
 
 
@@ -49,25 +49,25 @@ def find_minimum_cut(graph, source, target):
 
 
 
-
 # Function to perform spectral clustering on the graph
 def spectral_clustering_divide(graph, n_clusters=2):
     # Get the adjacency matrix with weights
     adj_matrix = nx.to_numpy_array(graph, weight='weight')
+    node_list=list(graph.nodes())
 
     # Perform spectral clustering
     sc = SpectralClustering(n_clusters=n_clusters, affinity='precomputed',
                             assign_labels='discretize', random_state=42)
     labels = sc.fit_predict(adj_matrix)
+    node_to_label={node_list[i]:labels[i] for i in range(len(node_list))}
 
-    # Create subgraphs for each cluster
-    subgraphs = []
+    # Create partition
+    parts = []
     for i in range(n_clusters):
-        nodes_in_cluster = [node for node, label in enumerate(labels) if label == i]
-        subgraph = graph.subgraph(nodes_in_cluster)
-        subgraphs.append(subgraph)
+        nodes_in_cluster = [node for node in node_list if node_to_label[node]  == i]
+        parts.append(nodes_in_cluster)
 
-    return subgraphs, labels
+    return parts, node_to_label
 
 # Function to find and print the cut edges
 def find_cut_edges(graph, labels):
@@ -594,10 +594,9 @@ def process_graph(file_path):
             numcomponent+=1
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
-
-
             if len(component)<1000:
                  G_sub = shG.subgraph(component).copy()
+
                  try:
                      removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
                      removed_weight+=removed_weight1
@@ -606,38 +605,41 @@ def process_graph(file_path):
                  except ValueError as e:
                      print(f"Caught an error  {e}")
 
-
             totalsum1=0
             totalsum2=0
             totalsum0=0
-            if  len(component) >=1000:
+            #if  len(component) >=1000:
+            if  1==1:
                         G_sub = shG.subgraph(component).copy()
+                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
 
-                        print("number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
+                        partition,node_to_label= spectral_clustering_divide(G_sub, n_clusters=2)
 
-                        numpair,distance=read_num_pairs("numpair.csv")
-                        percentage=1.01
-                        lightset =calculate_light_set(G_sub,percentage)
-                        while len(lightset)<2* numpair:
-                            percentage+=0.1
-                            lightset =calculate_light_set(G_sub,percentage)
-                        print("select small degree vertices")
+                        numpair=min(len(partition[0]),len(partition[1]))
+                        print(f"size of partition 1 is {len(partition[0])}, size of partition 2 is {len(partition[1])}")
+                        for s in range(len(partition[0])):
+                            G_sub.add_edge(0,partition[0][s],weight=99999999)
+                            G_sub.add_edge(partition[0][s],0,weight=99999999)
                         sum2=0
-                      
-                        l=len(lightset)
-                        start_time=time.time()
-                        for i in range(numpair):
-                            if time.time()-start_time>time_limit:
-                                  break
-                            lightset=list(lightset)
-                            target=lightset[i]
-                            source=lightset[l-i-1]
 
-                            if source!=target and nx.has_path(G_sub,source,target) and nx.has_path(G_sub,target,source):
-                                      distance1=nx.shortest_path_length(G_sub,source=source,target=target)
-                                      distance2=nx.shortest_path_length(G_sub,target=source,source=target)
-                                      print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
+                        cut_value1=0
+                        cut_edges1 =[]
+                        if 1==1:
+                                      target=1
+                                      source=0
+                                      #distance1=nx.shortest_path_length(G_sub,source=source,target=target)
+                                      #distance2=nx.shortest_path_length(G_sub,source=target,target=source)
+                                      #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
+                        for s in range(len(partition[0])):
+                            G_sub.remove_edge(0,partition[0][s])
+                            G_sub.remove_edge(partition[0][s],0)
+                        for s in range(len(partition[1])):
+                            G_sub.add_edge(partition[1][s],1,weight=99999999)
+                            G_sub.add_edge(1, partition[1][s],weight=99999999)
+                        if 1==1:
+                                      target=1
+                                      source=0
                                       cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
                                       print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}") 
                                       weight1=0
@@ -647,11 +649,14 @@ def process_graph(file_path):
                                       else:
                                           cut_edges=cut_edges2
                                       for u,v,w in cut_edges:
+
+                                          if u==0 or v==0 or u==1 or v==1:
+                                               continue
                                           edge_flag[(u,v)]=0
-                                          G_sub.remove_edge(u,v)
                                           num1+=1
                                           weight1+=edge_weights[(u,v)]
                                       sum2+=weight1
+
                         removed_weight+=sum2
                         print(f"The {numcomponent}th component, removed weight is {sum2}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
 

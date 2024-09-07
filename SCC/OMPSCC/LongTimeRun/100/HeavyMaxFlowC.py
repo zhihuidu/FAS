@@ -647,6 +647,9 @@ def process_graph(file_path):
             totalsum0=0
             if  len(component) >1000:
                         G_sub = shG.subgraph(component).copy()
+
+                        print("number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
+
                         numpair,distance=read_num_pairs("numpair.csv")
                         percentage=0.8
                         heavyset =calculate_heavy_set(G_sub,percentage)

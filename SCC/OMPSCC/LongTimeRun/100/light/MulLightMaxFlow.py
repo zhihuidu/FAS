@@ -567,15 +567,10 @@ def process_graph(file_path):
 
 
 
-    subcomponentsize=5000
-    fixcyclelen=5
-    maxcyclelen=100
-    numcycles=2000
-    heavysetsize=200
     #reading from a file will allow us to change the value dynamically
     fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
-
     numcheckacyclic=0
+
     while not nx.is_directed_acyclic_graph(shG):
         fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
         time_limit=read_time_limit("time_limit.csv")
@@ -607,38 +602,60 @@ def process_graph(file_path):
                      print(f"Caught an error  {e}")
 
 
+
+
             totalsum1=0
             totalsum2=0
             totalsum0=0
-            if  len(component) >=1000:
+            #if  len(component) >=1000:
+            if  1==1:
                         G_sub = shG.subgraph(component).copy()
 
-                        print("number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
+                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
 
                         numpair,distance=read_num_pairs("numpair.csv")
+                        numpair=min(numpair,int(len(component)/2-1))
                         percentage=1.01
                         lightset =calculate_light_set(G_sub,percentage)
-                        while len(lightset)<2* numpair:
+                        while len(lightset)<2* numpair+1:
                             percentage+=0.1
                             lightset =calculate_light_set(G_sub,percentage)
-                        print("select small degree vertices")
+                        print(f"number of pairs is {numpair}, select small degree vertex set with {len(lightset)} vertices")
+
+                        lightset=list(lightset)
+                        l=len(lightset)
+                        for s in range(numpair):
+                            G_sub.add_edge(0,lightset[s],weight=99999999)
+                            G_sub.add_edge(lightset[l-s-1],1,weight=99999999)
+
                         sum2=0
                       
-                        l=len(lightset)
-                        start_time=time.time()
-                        for i in range(numpair):
-                            if time.time()-start_time>time_limit:
-                                  break
-                            lightset=list(lightset)
-                            target=lightset[i]
-                            source=lightset[l-i-1]
+                        cut_value1=0
+                        cut_edges1=[]
 
-                            if source!=target and nx.has_path(G_sub,source,target) and nx.has_path(G_sub,target,source):
-                                      distance1=nx.shortest_path_length(G_sub,source=source,target=target)
-                                      distance2=nx.shortest_path_length(G_sub,target=source,source=target)
-                                      print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
+                        if 1==1 :
+                            target=1
+                            source=0
+
+                            if source!=target and nx.has_path(G_sub,source,target):
+                                      #distance1=nx.shortest_path_length(G_sub,source=source,target=target)
+                                      #distance2=nx.shortest_path_length(G_sub,target=source,source=target)
+                                      #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
+                                      print(f"cut weight 1 is {cut_value1)")
+                        for s in range(numpair):
+                            G_sub.remove_edge(0,lightset[s])
+                            G_sub.remove_edge(lightset[l-s-1],1)
+                            G_sub.add_edge(1, lightset[l-s-1],weight=99999999)
+                            G_sub.add_edge(lightset[s],0,weight=99999999)
+                        if 1==1 :
+                            target=1
+                            source=0
+                            if source!=target and nx.has_path(G_sub,target,source):
                                       cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
+                                      print(f"cut weight 2 is {cut_value2)")
+
+
                                       print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}") 
                                       weight1=0
                                       num1=0
@@ -647,6 +664,10 @@ def process_graph(file_path):
                                       else:
                                           cut_edges=cut_edges2
                                       for u,v,w in cut_edges:
+
+                                          if u==0 or v==0 or u==1 or v==1:
+                                                continue
+
                                           edge_flag[(u,v)]=0
                                           G_sub.remove_edge(u,v)
                                           num1+=1
