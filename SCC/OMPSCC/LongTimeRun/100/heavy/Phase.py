@@ -703,12 +703,11 @@ def process_graph(file_path):
                         for s in range(numpair):
                             if G_sub.has_edge(0,lcomponent[s]):
                                 G_sub.remove_edge(0,lcomponent[s])
-                            G_sub.add_edge(1,lcomponent[s],weight=99999999)
-
+                            G_sub.add_edge(lcomponent[s],0,weight=99999999)
                         for s in range(numpair,len(lcomponent)):
                             if G_sub.has_edge(lcomponent[s],1):
                                 G_sub.remove_edge(lcomponent[s],1)
-                            G_sub.add_edge(lcomponent[s],0,weight=99999999)
+                            G_sub.add_edge(1,lcomponent[s],weight=99999999)
                         if 1==1:
                                       target=1
                                       source=0
