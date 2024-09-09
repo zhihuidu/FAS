@@ -607,7 +607,7 @@ def process_graph(file_path):
 
    
     num_removed= preremove_edge(G,100,edge_flag)
-    addback_times=10
+    addback_times=100
     #print(f"removed {num_removed} edges with degree >= 100")
 
     #removed_weight=read_removed_edges("removed.csv",edge_flag )
@@ -638,7 +638,7 @@ def process_graph(file_path):
               G=build_from_EdgeList(edge_weights)
               print(f"add back  the removed high degree low weight edges")
               print(f"addback_times is {addback_times}")
-              addback_interval_edge(G,addback_times*10-10,addback_times*10,edge_flag)
+              addback_interval_edge(G,addback_times-1,addback_times,edge_flag)
               addback_times-=1
               shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
               acyclic_flag=nx.is_directed_acyclic_graph(shG)
