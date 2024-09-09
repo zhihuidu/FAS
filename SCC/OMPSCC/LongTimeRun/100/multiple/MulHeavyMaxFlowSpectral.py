@@ -619,7 +619,8 @@ def process_graph(file_path):
                         print(f"size of partition 1 is {len(partition[0])}, size of partition 2 is {len(partition[1])}")
                         for s in range(len(partition[0])):
                             G_sub.add_edge(0,partition[0][s],weight=99999999)
-                            G_sub.add_edge(partition[0][s],0,weight=99999999)
+                        for s in range(len(partition[1])):
+                            G_sub.add_edge(partition[1][s],1,weight=99999999)
                         sum2=0
 
                         cut_value1=0
@@ -632,11 +633,13 @@ def process_graph(file_path):
                                       #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
                         for s in range(len(partition[0])):
-                            G_sub.remove_edge(0,partition[0][s])
-                            G_sub.remove_edge(partition[0][s],0)
+                            if G_sub.has_edge(0,partition[0][s]):
+                                G_sub.remove_edge(0,partition[0][s])
+                            G_sub.add_edge(partition[0][s],0,weight=99999999)
                         for s in range(len(partition[1])):
-                            G_sub.add_edge(partition[1][s],1,weight=99999999)
-                            G_sub.add_edge(1, partition[1][s],weight=99999999)
+                            if G_sub.has_edge(partition[1][s],1)
+                                G_sub.add_edge(partition[1][s],1,weight=99999999)
+                            G_sub.add_edge(1,partition[1][s],weight=99999999)
                         if 1==1:
                                       target=1
                                       source=0

@@ -537,6 +537,50 @@ def remove_highdegree_lowweight_edge(G,p1,p2,edge_flag):
     return num_removed
 
 
+def preremove_edge(G,weight,edge_flag):
+
+    num_added=0
+    for u,v,data in G.edges(data=True):
+        if data['weight'] <weight:
+            edge_flag[(u,v)]=0
+            num_added+=1
+    return num_added
+def addback_edge(G,weight,edge_flag):
+
+    num_added=0
+    for u,v,data in G.edges(data=True):
+        if data['weight'] <weight:
+            edge_flag[(u,v)]=1
+            num_added+=1
+    return num_added
+
+def addback_highdegree_lowweight_edge(G,p1,p2,edge_flag):
+    # Calculate in-degree, out-degree, in-weight, and out-weight
+    in_degrees = dict(G.in_degree())
+    out_degrees = dict(G.out_degree())
+    in_weights = {node: sum(data['weight'] for _, _, data in G.in_edges(node, data=True)) for node in G.nodes()}
+    out_weights = {node: sum(data['weight'] for _, _, data in G.out_edges(node, data=True)) for node in G.nodes()}
+
+    # Calculate the distributions
+    in_degree_distribution = Counter(in_degrees.values())
+    out_degree_distribution = Counter(out_degrees.values())
+    in_weight_distribution = Counter(in_weights.values())
+    out_weight_distribution = Counter(out_weights.values())
+
+    in_degree_stats = calculate_stats(in_degree_distribution)
+    out_degree_stats = calculate_stats(out_degree_distribution)
+    in_weight_stats = calculate_stats(in_weight_distribution)
+    out_weight_stats = calculate_stats(out_weight_distribution)
+    diff_in=in_degree_stats[1]-in_degree_stats[0]
+    diff_out=out_degree_stats[1]-out_degree_stats[0]
+
+    num_added=0
+    for u,v,data in G.edges(data=True):
+        if in_degrees[u] >=p1 and out_degrees[v]>=p1 and data['weight'] <3:
+            edge_flag[(u,v)]=1
+            num_added+=1
+            #print(f"({u},{v},{data['weight']} indegree={in_degrees[u]} max in degree {in_degree_stats[1]}, max out degree {out_degree_stats[1]} outdegree={out_degrees[v]},average in weight {in_weight_stats[2]} average out weight {out_weight_stats[2]}")
+    return num_added
 
 
 def process_graph(file_path):
@@ -552,7 +596,8 @@ def process_graph(file_path):
     last_removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    #num_removed=remove_highdegree_lowweight_edge(G,100,100,edge_flag)
+    num_removed= preremove_edge(G,100,edge_flag)
+    addback_flag=False
     #print(f"removed {num_removed} edges with degree >= 100")
 
     #removed_weight=read_removed_edges("removed.csv",edge_flag )
@@ -576,7 +621,20 @@ def process_graph(file_path):
     fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
 
     numcheckacyclic=0
-    while not nx.is_directed_acyclic_graph(shG):
+    acyclic_flag=nx.is_directed_acyclic_graph(shG)
+    while not acyclic_flag or (not addback_flag) :
+        if acyclic_flag and (not addback_flag) :
+              print(f"read original again")
+              node_list, edge_weights, in_edges, out_edges = build_ArrayDataStructure(file_path)
+              print(f"build the graph")
+              G=build_from_EdgeList(edge_weights)
+              print(f"add back  the removed high degree low weight edges")
+              addback_edge(G,100,edge_flag)
+              shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
+              acyclic_flag=nx.is_directed_acyclic_graph(shG)
+              addback_flag=True
+              continue
+
         fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
         time_limit=read_time_limit("time_limit.csv")
         print("the graph is not a DAG. Finding strongly connected components")
@@ -645,8 +703,10 @@ def process_graph(file_path):
                                       #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
                         for s in range(numpair):
-                            G_sub.remove_edge(0,heavyset[s])
-                            G_sub.remove_edge(heavyset[l-s-1],1)
+                            if G_sub.has_edge(0,heavyset[s]):
+                                G_sub.remove_edge(0,heavyset[s])
+                            if G_sub.has_edge(heavyset[l-s-1],1):
+                                G_sub.remove_edge(heavyset[l-s-1],1)
                             G_sub.add_edge(1,heavyset[l-s-1],weight=99999999)
                             G_sub.add_edge(heavyset[s],0,weight=99999999)
                         if 1==1:
@@ -688,7 +748,7 @@ def process_graph(file_path):
                         write_removed_edges(output_file,edge_flag,edge_weights) 
                         last_removed_weight=actweight
             else:
-                 if numcheckacyclic % 100 ==0 and (actweight-last_removed_weight)/total >0.01:
+                        #if numcheckacyclic % 100 ==0 and (actweight-last_removed_weight)/total >0.01:
                         write_removed_edges(output_file,edge_flag,edge_weights)
                         last_removed_weight=actweight
 
@@ -701,8 +761,7 @@ def process_graph(file_path):
         print(f"dag weight={dag_weight}")
         if dag_weight+removed_weight != total:
             print("accumulated weight in each step is not the same as the final removed weight")
-
-
+        acyclic_flag=nx.is_directed_acyclic_graph(shG)
 
     print(f"relabel dag")
     mapping = relabel_dag(shG)

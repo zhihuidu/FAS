@@ -609,14 +609,18 @@ def process_graph(file_path):
                         if 1==1: 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, 0, 1)
                         for i in range(len(sourcelist)):
-                                      G_sub.remove_edge(0,sourcelist[1])
-                                      G_sub.remove_edge(targetlist[i],1)
+                                      if G_sub.has_edge(0,sourcelist[i]):
+                                          G_sub.remove_edge(0,sourcelist[i])
+                                      if G_sub.has_edge(targetlist[i],1):
+                                          G_sub.remove_edge(targetlist[i],1)
 
                                       G_sub.add_edge(1, targetlist[i],weight=99999999)
                                       G_sub.add_edge(sourcelist[i],0,weight=99999999)
 
+                        if 1==1: 
 
                                       cut_value2, cut_edges2 = find_minimum_cut(G_sub, 1, 0)
+                                      print(f"cut weitht 1 is {cut_value1}, cut weight 2 is {cut_value2}")
                                       weight1=0
                                       num1=0
                                       if cut_value1 < cut_value2:
@@ -627,7 +631,7 @@ def process_graph(file_path):
                                           if u==0 or v==0 or u==1 or v==1:
                                               continue
                                           edge_flag[(u,v)]=0
-                                          shG.remove_edge(u,v)
+                                          #shG.remove_edge(u,v)
                                           num1+=1
                                           weight1+=edge_weights[(u,v)]
                                       sum2+=weight1
