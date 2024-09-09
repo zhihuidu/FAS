@@ -634,11 +634,10 @@ def process_graph(file_path):
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
     while not acyclic_flag or addback_times>0 :
         if acyclic_flag and (addback_times>0) :
-              print(f"read original again")
-              node_list, edge_weights, in_edges, out_edges = build_ArrayDataStructure(file_path)
-              print(f"build the graph")
+              print(f"rebuild the graph")
               G=build_from_EdgeList(edge_weights)
               print(f"add back  the removed high degree low weight edges")
+              print(f"addback_times is {addback_times}")
               addback_interval_edge(G,addback_times*10-10,addback_times*10,edge_flag)
               addback_times-=1
               shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
@@ -687,19 +686,12 @@ def process_graph(file_path):
                         numpair,distance=read_num_pairs("numpair.csv")
                         numpair=min(numpair,int(len(component)/2-1))
                         print(f"We take {numpair} pair of vertices to calculate Max Flow")
-                        percentage=0.8
-                        heavyset =calculate_heavy_set(G_sub,percentage)
-                        while len(heavyset)<2* numpair+1:
-                            percentage-=0.1
-                            heavyset =calculate_heavy_set(G_sub,percentage)
-                        print(f"select high degree vertex set with {len(heavyset)} vertices")
 
-                        heavyset=list(heavyset)
-                        l=len(heavyset)
+                        lcomponent=list(component)
                         for s in range(numpair):
-                            G_sub.add_edge(0,heavyset[s],weight=99999999)
-                            G_sub.add_edge(heavyset[l-s-1],1,weight=99999999)
-                        print(f"add supernodes and {2*numpair} edges")
+                              G_sub.add_edge(0,lcomponent[s],weight=99999999)
+                        for s in range(numpair,len(lcomponent)):
+                              G_sub.add_edge(lcomponent[s],1,weight=99999999)
                         sum2=0
 
                         cut_value1=0
@@ -707,18 +699,16 @@ def process_graph(file_path):
                         if 1==1:
                                       target=1
                                       source=0
-
-                                      #distance1=nx.shortest_path_length(G_sub,source=source,target=target)
-                                      #distance2=nx.shortest_path_length(G_sub,target=source,source=target)
-                                      #print(f"distance from {source} to {target} is {distance1}, from {target} to {source} is {distance2}") 
                                       cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
                         for s in range(numpair):
-                            if G_sub.has_edge(0,heavyset[s]):
-                                G_sub.remove_edge(0,heavyset[s])
-                            if G_sub.has_edge(heavyset[l-s-1],1):
-                                G_sub.remove_edge(heavyset[l-s-1],1)
-                            G_sub.add_edge(1,heavyset[l-s-1],weight=99999999)
-                            G_sub.add_edge(heavyset[s],0,weight=99999999)
+                            if G_sub.has_edge(0,lcomponent[s]):
+                                G_sub.remove_edge(0,lcomponent[s])
+                            G_sub.add_edge(1,lcomponent[s],weight=99999999)
+
+                        for s in range(numpair,len(lcomponent)):
+                            if G_sub.has_edge(lcomponent[s],1):
+                                G_sub.remove_edge(lcomponent[s],1)
+                            G_sub.add_edge(lcomponent[s],0,weight=99999999)
                         if 1==1:
                                       target=1
                                       source=0
@@ -758,7 +748,7 @@ def process_graph(file_path):
                         write_removed_edges(output_file,edge_flag,edge_weights) 
                         last_removed_weight=actweight
             else:
-                        #if numcheckacyclic % 100 ==0 and (actweight-last_removed_weight)/total >0.01:
+                  if numcheckacyclic % 100 ==0 and (actweight-last_removed_weight)/total >0.01:
                         write_removed_edges(output_file,edge_flag,edge_weights)
                         last_removed_weight=actweight
 
