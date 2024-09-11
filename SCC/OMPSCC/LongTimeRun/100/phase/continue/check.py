@@ -16,9 +16,11 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Phase"
+FileNameHead="Continue"
 
 
+removed_list=[]
+complete_removed_list=[]
 
 def read_num_pairs(file_path):
     numpairs=2
@@ -124,7 +126,7 @@ def build_ArrayDataStructure(csv_file_path):
     sorted_edges=[]
     for (u,v), w in tmp_edges.items():
         sorted_edges.append((u,v))
-    
+
     return node_list, merged_edges, in_adj, out_adj,sorted_edges
 
 
@@ -597,6 +599,44 @@ def addback_highdegree_lowweight_edge(G,p1,p2,edge_flag):
             #print(f"({u},{v},{data['weight']} indegree={in_degrees[u]} max in degree {in_degree_stats[1]}, max out degree {out_degree_stats[1]} outdegree={out_degrees[v]},average in weight {in_weight_stats[2]} average out weight {out_weight_stats[2]}")
     return num_added
 
+def generage_complete_removed_list(edge_flag):
+    addnum=0
+    sourceset=set()
+    targetset=set()
+    global complete_removed_list
+    complete_removed_list=[]
+    for (u,v),flag in edge_flag.items():
+        if flag==0:
+           complete_removed_list.append((u,v))
+
+def select_split_set(edge_flag):
+    addnum=0
+    sourceset=set()
+    targetset=set()
+    global removed_list
+    removed_list=[]
+    for (u,v),flag in edge_flag.items():
+        if flag==0:
+            if u not in targetset:
+                sourceset.add(u)
+                if v not in sourceset:
+                    targetset.add(v)
+                    removed_list.append((u,v))
+
+def select_edges(edge_flag,up_v,num):
+    global removed_list
+    print(f"qualified removed edges is {len(removed_list)}")
+    edge_set=set()
+    up_v=min(up_v,len(removed_list))
+    edge_list=removed_list[up_v-num:up_v]
+    '''
+    for i in range(num):
+        e=random.choice(removed_list)
+        edge_set.add(e)
+    edge_list=list(edge_set)
+    '''
+    return edge_list, up_v
+
 
 def process_graph(file_path):
     print(f"read data")
@@ -612,176 +652,63 @@ def process_graph(file_path):
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
    
-    num_removed= preremove_edge(G,100,edge_flag)
-    #564181 in sorted edges
-    #addback_times=564181
-    add_pointer=564181
-    #print(f"removed {num_removed} edges with degree >= 100")
-
-    #removed_weight=read_removed_edges("removed.csv",edge_flag )
-    for u,v in edge_flag:
-        if edge_flag[(u,v)]==0:
-           removednum+=1
-           removed_weight+=edge_weights[(u,v)]
-    print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    generage_complete_removed_list(edge_flag)
 
     shG=build_from_GraphAndFlag (G,edge_flag)
-
-
-
-
-    subcomponentsize=5000
-    fixcyclelen=5
-    maxcyclelen=100
-    numcycles=2000
-    heavysetsize=200
-    #reading from a file will allow us to change the value dynamically
-    fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
-
-    numcheckacyclic=0
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
-    add_block=30000
-    actweight=0
-    while not acyclic_flag or add_pointer>0 :
-        if acyclic_flag and (add_pointer>0) :
-              for i in range(max(0,add_pointer-add_block),add_pointer):
-                  u,v=sorted_edges[i]
-                  edge_flag[(u,v)]=1
-              print(f"add back {add_block} the removed high degree low weight edges")
-              print(f"the current pointer is {add_pointer}");
-              add_pointer-=add_block
-              shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
-              acyclic_flag=nx.is_directed_acyclic_graph(shG)
-              continue
+    if not acyclic_flag:
+        print("input graph has loops")
+        return
 
-        fixcyclelen, mincyclelen, numcycles,maxcyclelen,subcomponentsize,heavysetsize=read_config("subconfig.csv")
-        time_limit=read_time_limit("time_limit.csv")
-        print("the graph is not a DAG. Finding strongly connected components")
-        scc=list(nx.strongly_connected_components(shG))
-        print(f"number of scc is {len(scc)}")
-
-        numcomponent=0
-        oldnum=num
-        numcheckacyclic+=1
-
-        for component in scc:
-            if len(component)==1:
-                 continue
-
-            numcomponent+=1
-            print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
-            subnum=0
-
-
-            if len(component)<5:
-                 G_sub = shG.subgraph(component).copy()
-
-                 try:
-                     removed_weight1= solve_ip_scc(G_sub,edge_flag,shG)
-                     removed_weight+=removed_weight1
-                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
-                     continue
-                 except ValueError as e:
-                     print(f"Caught an error  {e}")
+    not_finish=True
+    max_weight=0
+    max_edge=(0,0)
+    write_flag=False
+    while not_finish:
+        add_flag=False
+        for i in range(len(complete_removed_list)):
+            print(f"check edge {i}")
+            u,v=complete_removed_list[i]
+            shG.add_edge(u,v)
+            acyclic_flag=nx.is_directed_acyclic_graph(shG)
+            if acyclic_flag:
+                  write_flag=True
+                  add_flag=True
+                  print(f"find edge {(u,v)} can be added back")
+                  if max_weight<edge_weights[(u,v)]:
+                      max_weight=edge_weights[(u,v)]
+                      max_edge=(u,v)
+            else:
+                      scc=list(nx.strongly_connected_components(shG))
+                      print(f"edge {(u,v)} leads to {len(scc)} SCC")
+                      for component in scc:
+                          if len(component) >1:
+                             print(f"edge {(u,v)} weight {edge_weights[(u,v)]} leads to {len(scc)} SCC and  the size of the current component is {len(component)}")
+            shG.remove_edge(u,v)
+        if add_flag :
+            edge_flag[max_edge]=1
+            generage_complete_removed_list(edge_flag)
+            print(f"add biggest weight  edge {max_edge} with weight {edge_weight[max_edge]}\n")
+        else:
+            not_finish=False
 
 
-
-            totalsum1=0
-            totalsum2=0
-            totalsum0=0
-            #if  len(component) >=1000:
-            if  1==1:
-                        G_sub = shG.subgraph(component).copy()
-                        print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
-                        numpair,distance=read_num_pairs("numpair.csv")
-                        numpair=min(numpair,int(len(component)/2-1))
-                        print(f"We take {numpair} pair of vertices to calculate Max Flow")
-
-                        lcomponent=list(component)
-                        for s in range(numpair):
-                              G_sub.add_edge(0,lcomponent[s],weight=99999999)
-                        for s in range(numpair,len(lcomponent)):
-                              G_sub.add_edge(lcomponent[s],1,weight=99999999)
-                        sum2=0
-
-                        cut_value1=0
-                        cut_edges1=[]
-                        if 1==1:
-                                      target=1
-                                      source=0
-                                      cut_value1, cut_edges1 = find_minimum_cut(G_sub, source, target)
-                        for s in range(numpair):
-                            if G_sub.has_edge(0,lcomponent[s]):
-                                G_sub.remove_edge(0,lcomponent[s])
-                            G_sub.add_edge(lcomponent[s],0,weight=99999999)
-                        for s in range(numpair,len(lcomponent)):
-                            if G_sub.has_edge(lcomponent[s],1):
-                                G_sub.remove_edge(lcomponent[s],1)
-                            G_sub.add_edge(1,lcomponent[s],weight=99999999)
-                        if 1==1:
-                                      target=1
-                                      source=0
-                                      cut_value2, cut_edges2 = find_minimum_cut(G_sub, target, source)
-                                      print(f"value from {source} to {target} is {cut_value1}, from {target} to {source} is {cut_value2}") 
-                                      weight1=0
-                                      num1=0
-                                      if cut_value1 < cut_value2:
-                                          cut_edges=cut_edges1
-                                      else:
-                                          cut_edges=cut_edges2
-                                      for u,v,w in cut_edges:
-                                          edge_flag[(u,v)]=0
-                                          num1+=1
-                                          weight1+=edge_weights[(u,v)]
-                                      sum2+=weight1
-
-                        removed_weight+=sum2
-                        print(f"The {numcomponent}th component, removed weight is {sum2}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
-
-
-
-            oldnum=removednum
-            removednum=0
-            actweight=0
-            for u,v in edge_flag:
-                if edge_flag[(u,v)]==0:
-                    removednum+=1
-                    actweight+=edge_weights[(u,v)]
-            print(f"{numcheckacyclic} check,to here removed {removednum} edges and removed weight is {actweight} and percentage of remained  weight ={(total-actweight)/total *100}, removed weight is {removed_weight}")
-
+    if write_flag:   
             current_time = datetime.now()
             time_string = current_time.strftime("%Y%m%d_%H%M%S")
-            output_file = f"{FileNameHead}-removed-edges-{time_string}.csv"
-            print(f"removed edges weight increased {(actweight-last_removed_weight)/total}")
-            if   (actweight-last_removed_weight)/total >0.05:
-                        write_removed_edges(output_file,edge_flag,edge_weights) 
-                        last_removed_weight=actweight
-            else:
-                  if numcheckacyclic % 100 ==0 and (actweight-last_removed_weight)/total >0.01:
-                        write_removed_edges(output_file,edge_flag,edge_weights)
-                        last_removed_weight=actweight
+            output_file = f"Acyclic-{FileNameHead}-removed-edges-{time_string}.csv"
+            write_removed_edges(output_file,edge_flag,edge_weights)
 
 
-        print(f"sum of removed weight={actweight},percentage ={(actweight)/total *100}")
+            print(f"relabel dag")
+            mapping = relabel_dag(shG)
 
-        print(f"build dag")
-        shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
-        dag_weight=sum(data['weight'] for u, v, data in shG.edges(data=True))
-        print(f"dag weight={dag_weight}, percentage ={dag_weight/total*100}")
-        if dag_weight+actweight != total:
-            print("accumulated weight in each step is not the same as the final removed weight")
-        acyclic_flag=nx.is_directed_acyclic_graph(shG)
-
-    print(f"relabel dag")
-    mapping = relabel_dag(shG)
-
-    print(f"write file")
-    current_time = datetime.now()
-    time_string = current_time.strftime("%Y%m%d_%H%M%S")
-    output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
-    write_relabelled_nodes_to_file(mapping, output_file)
-
-
+            print(f"write file")
+            current_time = datetime.now()
+            time_string = current_time.strftime("%Y%m%d_%H%M%S")
+            output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
+            write_relabelled_nodes_to_file(mapping, output_file)
 
 
 file_path = sys.argv[1]

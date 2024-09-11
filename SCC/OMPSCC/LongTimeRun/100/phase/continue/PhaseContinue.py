@@ -124,7 +124,7 @@ def build_ArrayDataStructure(csv_file_path):
     sorted_edges=[]
     for (u,v), w in tmp_edges.items():
         sorted_edges.append((u,v))
-    
+
     return node_list, merged_edges, in_adj, out_adj,sorted_edges
 
 
@@ -612,17 +612,18 @@ def process_graph(file_path):
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
    
-    num_removed= preremove_edge(G,100,edge_flag)
+    #num_removed= preremove_edge(G,100,edge_flag)
     #564181 in sorted edges
     #addback_times=564181
-    add_pointer=564181
     #print(f"removed {num_removed} edges with degree >= 100")
 
-    #removed_weight=read_removed_edges("removed.csv",edge_flag )
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    '''
     for u,v in edge_flag:
         if edge_flag[(u,v)]==0:
            removednum+=1
            removed_weight+=edge_weights[(u,v)]
+'''           
     print(f"to here removed {removednum} edges and the weight is {removed_weight}, percentage is {removed_weight/total*100}")
 
     shG=build_from_GraphAndFlag (G,edge_flag)
@@ -640,14 +641,15 @@ def process_graph(file_path):
 
     numcheckacyclic=0
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
-    add_block=30000
-    actweight=0
+    add_block=20
+    add_pointer=len(edge_flag)
+    #while not acyclic_flag or add_pointer<len(edge_flag) :
     while not acyclic_flag or add_pointer>0 :
-        if acyclic_flag and (add_pointer>0) :
-              for i in range(max(0,add_pointer-add_block),add_pointer):
+        if acyclic_flag and (add_pointer>0):
+              for i in range(max(add_pointer-add_block,0),add_pointer):
                   u,v=sorted_edges[i]
                   edge_flag[(u,v)]=1
-              print(f"add back {add_block} the removed high degree low weight edges")
+              print(f"add back {add_block} edges")
               print(f"the current pointer is {add_pointer}");
               add_pointer-=add_block
               shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
@@ -673,7 +675,7 @@ def process_graph(file_path):
             subnum=0
 
 
-            if len(component)<5:
+            if len(component)<6:
                  G_sub = shG.subgraph(component).copy()
 
                  try:
@@ -694,7 +696,7 @@ def process_graph(file_path):
                         G_sub = shG.subgraph(component).copy()
                         print(f"number of vertices of the SCC is {G_sub.number_of_nodes()}, number of edges is {G_sub.number_of_edges()}")
                         numpair,distance=read_num_pairs("numpair.csv")
-                        numpair=min(numpair,int(len(component)/2-1))
+                        numpair=min(numpair,int(len(component)/2))
                         print(f"We take {numpair} pair of vertices to calculate Max Flow")
 
                         lcomponent=list(component)
@@ -762,15 +764,20 @@ def process_graph(file_path):
                         last_removed_weight=actweight
 
 
-        print(f"sum of removed weight={actweight},percentage ={(actweight)/total *100}")
+        print(f"sum of removed weight={actweight},percentage of remained  weight ={(total-actweight)/total *100}")
 
         print(f"build dag")
         shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
         dag_weight=sum(data['weight'] for u, v, data in shG.edges(data=True))
-        print(f"dag weight={dag_weight}, percentage ={dag_weight/total*100}")
-        if dag_weight+actweight != total:
+        print(f"dag weight={dag_weight}")
+        if dag_weight+removed_weight != total:
             print("accumulated weight in each step is not the same as the final removed weight")
         acyclic_flag=nx.is_directed_acyclic_graph(shG)
+        if acyclic_flag:
+            current_time = datetime.now()
+            time_string = current_time.strftime("%Y%m%d_%H%M%S")
+            output_file = f"Acyclic-{FileNameHead}-removed-edges-{time_string}.csv"
+            write_removed_edges(output_file,edge_flag,edge_weights)
 
     print(f"relabel dag")
     mapping = relabel_dag(shG)
