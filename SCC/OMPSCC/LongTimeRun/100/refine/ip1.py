@@ -601,7 +601,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     print("add x variable")
     # Position variables for each vertex (continuous)
     for v in graph.nodes():
-        p[v] = model.addVar(vtype=GRB.INTEGER,lb=0,ub=M-1, name=f"p_{v}")
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
 
     print("add p variable")
     # Objective: minimize the total weight of edges removed
@@ -611,7 +611,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     # Constraints: Linear ordering constraints (relaxed for fractional x_uv)
     for u, v in graph.edges():
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
-        model.addConstr(p[u] +0.5 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u] +epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
 
     print("add p constraints")
     # Constraints: Cycle elimination (no bidirectional edges, also relaxed)
@@ -627,7 +627,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     print("after optimization")
     # Retrieve the fractional edge removal solution
     #fractional_edges = { (u, v): x[(u, v)].x for u, v in graph.edges() }
-    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.8 )
+    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.2 )
 
 
     # Retrieve the linear ordering based on the positions of vertices (p_v)
@@ -636,7 +636,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     # Apply rounding to get the final optimal result (binary solution for edge removal)
     #removed_edges = [(u, v) for u, v in graph.edges() if fractional_edges[(u, v)] < 0.5]
     for u, v in graph.edges() :
-        if fractional_edges[(u, v)] < 0.8:
+        if fractional_edges[(u, v)] < 0.2:
             edge_flag[(u,v)]=0
 
     # Apply rounding to get the final optimal result (binary solution for edge removal)
@@ -652,9 +652,9 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
 def solve_fas_with_weighted_ip(graph,edge_flag):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
-    epsilon = 1e-6  # A small constant to enforce strict inequality
  
     model.setParam('OutputFlag', 0)  # Silent mode
+    epsilon = 1e-6  # A small constant to enforce strict inequality
     # Variables: x_uv for each edge (binary), and p_v for each vertex (position)
     x = {}
     p = {}
@@ -664,9 +664,10 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     for u, v in graph.edges():
         x[(u, v)] = model.addVar(vtype=GRB.BINARY, name=f"x_{u}_{v}")
     print(f"add {(graph.number_of_edges())} edges")
+
     # Position variables for each vertex (continuous, representing topological position)
     for v in graph.nodes():
-        p[v] = model.addVar(vtype=GRB.INTEGER,lb=0,ub=M-1, name=f"p_{v}")
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
     print(f"add {(graph.number_of_nodes())} nodes")
 
     # Objective: minimize the total weight of removed edges
@@ -676,7 +677,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ 0.5 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u]+ epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     print(f"add {(graph.number_of_edges())} p constraints")
 
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
