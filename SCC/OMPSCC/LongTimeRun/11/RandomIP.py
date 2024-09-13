@@ -525,7 +525,7 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
 
-            if len(component)<200:
+            if len(component)<2000:
                  G_sub = G.subgraph(component).copy()
                  removed_weight1= solve_ip_scc(G_sub,edge_flag)
                  removed_weight+=removed_weight1
@@ -534,7 +534,7 @@ def process_graph(file_path):
 
             while len(component) >subcomponentsize:
 
-                   smallcom=random.sample(component, subcomponentsize)
+                   smallcom=random.sample(list(component), subcomponentsize)
                    component.difference_update(smallcom)
 
                    G_sub = shG.subgraph(smallcom).copy()
