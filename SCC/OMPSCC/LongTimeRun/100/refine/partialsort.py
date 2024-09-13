@@ -665,14 +665,14 @@ def find_cycles_include_edge_list(G,elist,edge_weights):
                       cycles.append(cycle)
         return cycles
 
-def partial_topological_sort_and_reverse_edges(graph):
+def partial_topological_sort_and_reverse_edges(graph,edge_flag):
     reverse_edges = []
     topo_sort = []
     
     while len(graph) > 0:
         # Find nodes with no incoming edges (sources)
         sources = [node for node, degree in graph.in_degree() if degree == 0]
-        
+        print(f"find {len(sources)} source vertices")    
         if not sources:
             # We have a cycle, find the edge causing it
             try:
@@ -683,6 +683,8 @@ def partial_topological_sort_and_reverse_edges(graph):
                 reverse_edges.append(min_weight_edge)
                 # Remove the edge with the smallest weight
                 graph.remove_edge(*min_weight_edge)
+                print(f"remove edge {min_weight_edge}")
+                edge_flag[(min_weight_edge[0],min_weight_edge[1])]=0
             except nx.NetworkXNoCycle:
                 # If no cycle is found, break
                 break
@@ -717,9 +719,9 @@ def process_graph(file_path):
     print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
     generage_complete_removed_list(edge_flag,edge_weights)
     print(f"length of the complete removed list is {len(complete_removed_list)}")
+
+
     shG=build_from_GraphAndFlag (G,edge_flag)
-
-
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
     add_block=10
     add_pointer=len(complete_removed_list)
@@ -743,7 +745,7 @@ def process_graph(file_path):
 
 
         try:
-                     topo_sort, reverse_edges=partial_topological_sort_and_reverse_edges(graph):
+                     topo_sort, reverse_edges=partial_topological_sort_and_reverse_edges(shG,edge_flag)
                      removed_weight=0
                      for u,v,w in reverse_edges:
                           removed_weight+=w
@@ -759,6 +761,7 @@ def process_graph(file_path):
         except :
                      print(f"Caught an error  in the try part")
 
+        shG=build_from_GraphAndFlag (G,edge_flag)
 
 
     print(f"relabel dag")
@@ -776,29 +779,4 @@ def process_graph(file_path):
 file_path = sys.argv[1]
 sys.setrecursionlimit(900000)
 process_graph(file_path)
-
-
-
-
-
-
-
-# Example usage:
-# Create a weighted directed graph
-graph = nx.DiGraph()
-graph.add_weighted_edges_from([
-    ('A', 'B', 2),
-    ('A', 'C', 3),
-    ('B', 'D', 1),
-    ('C', 'D', 4),
-    ('D', 'E', 2),
-    ('E', 'C', 1)  # This creates a cycle with weight 1
-])
-
-# Perform partial topological sort and find reverse edges
-partial_sort, reverse_edges = partial_topological_sort_and_reverse_edges(graph)
-
-# Output the result
-print("Partial Topological Sort:", partial_sort)
-print("Reverse Edges:", reverse_edges)
 
