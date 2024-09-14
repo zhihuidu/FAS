@@ -611,7 +611,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     # Constraints: Linear ordering constraints (relaxed for fractional x_uv)
     for u, v in graph.edges():
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
-        model.addConstr(p[u] +epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u] + 0.001 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
 
     print("add p constraints")
     # Constraints: Cycle elimination (no bidirectional edges, also relaxed)
@@ -677,7 +677,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u]+ 0.001 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     print(f"add {(graph.number_of_edges())} p constraints")
 
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
@@ -693,9 +693,13 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
     #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
     removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.5 )
+    removed_edges=[]
     for u, v in graph.edges():  
         if x[(u, v)].x < 0.5 :
             edge_flag[(u,v)]=0
+            removed_edges.append((u,v))
+    for (u,v) in removed_edges:
+          graph.remove_edge(u,v)
 
     # Retrieve the linear ordering based on the positions of vertices (p_v)
     #vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
@@ -744,6 +748,10 @@ def process_graph(file_path):
 
             try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
+                     if nx.is_directed_acyclic_graph(G_sub):
+                         print("the subgraph becomes acyclic graph")
+                     else:
+                         print("still has loop, wrong")
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                      continue
@@ -751,7 +759,8 @@ def process_graph(file_path):
                      print(f"Caught an error  {e}")
 
 
-        acyclic_flag=True
+        shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
+        acyclic_flag=nx.is_directed_acyclic_graph(shG)
 
     print(f"relabel dag")
     shG=build_from_EdgeAndFlag(edge_weights,edge_flag)

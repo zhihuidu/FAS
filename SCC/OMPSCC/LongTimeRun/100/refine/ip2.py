@@ -601,7 +601,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     print("add x variable")
     # Position variables for each vertex (continuous)
     for v in graph.nodes():
-        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,up=M-1, name=f"p_{v}")
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
 
     print("add p variable")
     # Objective: minimize the total weight of edges removed
@@ -611,8 +611,8 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
     # Constraints: Linear ordering constraints (relaxed for fractional x_uv)
     for u, v in graph.edges():
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
-        model.addConstr(p[u] + epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
-
+        model.addConstr(p[u] + 0.001 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+    '''
     print("add p constraints")
     # Constraints: Cycle elimination (no bidirectional edges, also relaxed)
     for u, v in graph.edges():
@@ -621,6 +621,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_{u}_{v}")
 
     print("add self loop constraints")
+    '''
     # Optimize the model
     model.optimize()
 
@@ -673,13 +674,13 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ epsilon <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
-
+        model.addConstr(p[u]+ 0.01 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+    '''
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
     for u, v in graph.edges():
         if (v, u) in graph.edges():
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_2_{u}_{v}")
-
+'''
     # Optimize the model
     model.optimize()
 
