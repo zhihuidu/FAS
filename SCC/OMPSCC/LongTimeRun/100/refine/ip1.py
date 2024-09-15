@@ -698,16 +698,17 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ 0.001 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u]+ 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     print(f"add {(graph.number_of_edges())} p constraints")
 
+    '''
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
     for u, v in graph.edges():
         if (v, u) in graph.edges():
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_2_{u}_{v}")
 
     print(f"add no self loop  constraints")
-
+'''
 
     if initial:
         for u, v in graph.edges():

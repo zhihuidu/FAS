@@ -16,7 +16,7 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
+FileNameHead="indicator"
 
 
 
@@ -674,7 +674,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ 0.01 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+        model.addConstr(p[u]+ 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     '''
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
     for u, v in graph.edges():
@@ -757,10 +757,22 @@ def solve_indicator(graph,edge_flag):
     return removed_weight
 
 
-def solve_indicator_linear(graph,edge_flag):
+def solve_indicator_linear(graph,edge_flag,initial=False):
     # Initialize the Gurobi model
     model = gp.Model("MaxWeightDirectedGraph")
     model.setParam('OutputFlag', 0)  # Silent mode
+
+
+    # Set parameters to prioritize speed over optimality
+    model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
+    #model.setParam('TimeLimit', 7200)    # Set a time limit of 30 seconds
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+    model.setParam('Cuts', 1)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('MIPFocus', 1)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
+    #model.setParam('Threads', 8)       # Use 8 threads
+    model.setParam('SolutionLimit', 10)  # Stop after finding 10 feasible solutions
+
+
 
     # Variables: continuous labels for each node, and binary values for each edge
     p = {}  # Continuous label for each node
@@ -782,9 +794,9 @@ def solve_indicator_linear(graph,edge_flag):
 
     for u, v in graph.edges():
         # If x_uv = 0, enforce p_u >= p_v + epsilon (i.e., p_u > p_v)
-        model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
+        #model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
         # If x_uv = 1, enforce p_u + epsilon <= p_v (i.e., p_u < p_v)
-        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 0.1  <= p[v], name=f"keep_edge_{u}_{v}")
+        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 1  <= p[v], name=f"keep_edge_{u}_{v}")
 
 
 
@@ -793,6 +805,19 @@ def solve_indicator_linear(graph,edge_flag):
     model.setObjective(gp.quicksum(graph[u][v]['weight'] *(1- x[(u, v)]) for u, v in graph.edges()), GRB.MINIMIZE)
 
     print(f"add objective")
+
+
+    if initial:
+        for u, v in graph.edges():
+                x[(u, v)].start = 1  # Set initial value for the edge variable
+        for (u, v) in complete_removed_list:
+            if graph.has_edge(u,v):
+                x[(u, v)].start = 0  # Set initial value for the edge variable
+
+
+
+
+
     # Optimize the model
     model.optimize()
 
@@ -824,6 +849,14 @@ def process_graph(file_path):
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
+    old_edge_flag=edge_flag.copy()
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
+    generage_complete_removed_list(edge_flag,edge_weights)
+    print(f"length of the complete removed list is {len(complete_removed_list)}")
+    edge_flag=old_edge_flag
+    
+
     shG=G.copy()
 
 
@@ -846,9 +879,9 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
             G_sub = shG.subgraph(component).copy()
-            if 1==1:
+            if len(component)<1000:
                 try:
-                     removed_weight1=solve_indicator_linear(G_sub,edge_flag)
+                     removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                      acyclic_flag=nx.is_directed_acyclic_graph(G_sub)
@@ -858,6 +891,19 @@ def process_graph(file_path):
                          print("still has cycles, wrong")
                 except ValueError as e:
                      print(f"Caught an error  {e}")
+            else:
+                try:
+                     removed_weight1=solve_indicator_linear(G_sub,edge_flag,True)
+                     removed_weight+=removed_weight1
+                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                     acyclic_flag=nx.is_directed_acyclic_graph(G_sub)
+                     if acyclic_flag :
+                         print("no cycle")
+                     else:
+                         print("still has cycles, wrong")
+                except ValueError as e:
+                     print(f"Caught an error  {e}")
+
 
 
 

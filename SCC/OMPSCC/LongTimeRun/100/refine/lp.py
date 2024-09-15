@@ -797,9 +797,7 @@ def process_graph(file_path):
     print(f"total number of nodes={len(node_list)}, total number of edges={len(edge_weights)}")
     print(f"sum of weight={total}")
 
-    edge_flag=[]
-    for (u,v) in edge_weights:
-        edge_flag[(u,v)]=1
+    edge_flag={(u,v):1 for (u,v) in edge_weights }
 
     old_edge_flag=edge_flag.copy()
     removed_weight=read_removed_edges("removed.csv",edge_flag )
