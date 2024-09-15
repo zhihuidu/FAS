@@ -20,6 +20,27 @@ FileNameHead="indicator"
 
 
 
+removed_list=[]
+complete_removed_list=[]
+
+
+def generage_complete_removed_list(edge_flag,edge_weights):
+    addnum=0
+    sourceset=set()
+    targetset=set()
+    global complete_removed_list
+    complete_removed_list=[]
+    weight_list=[]
+    for (u,v),flag in edge_flag.items():
+        if flag==0:
+           complete_removed_list.append((u,v))
+           weight_list.append(edge_weights[(u,v)])
+
+    tmp_list=[x for _,x in sorted(zip(weight_list, complete_removed_list))]
+    complete_removed_list=tmp_list
+
+
+
 def read_num_pairs(file_path):
     numpairs=2
     mindistance=5
@@ -687,10 +708,15 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
     #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
     removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.5 )
-
+    removededge=[]
     for u, v in graph.edges() :
         if x[(u, v)].x < 0.5:
             edge_flag[(u,v)]=0
+            removededge.append((u,v))
+
+    for (u,v) in removededge:
+        graph.remove_edge(u,v)
+
     # Retrieve the linear ordering based on the positions of vertices (p_v)
     #vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
 
