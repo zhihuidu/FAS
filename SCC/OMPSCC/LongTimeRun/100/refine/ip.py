@@ -16,7 +16,28 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
+FileNameHead="ip"
+
+
+
+removed_list=[]
+complete_removed_list=[]
+
+
+def generage_complete_removed_list(edge_flag,edge_weights):
+    addnum=0
+    sourceset=set()
+    targetset=set()
+    global complete_removed_list
+    complete_removed_list=[]
+    weight_list=[]
+    for (u,v),flag in edge_flag.items():
+        if flag==0:
+           complete_removed_list.append((u,v))
+           weight_list.append(edge_weights[(u,v)])
+
+    tmp_list=[x for _,x in sorted(zip(weight_list, complete_removed_list))]
+    complete_removed_list=tmp_list
 
 
 
@@ -583,11 +604,25 @@ def addback_highdegree_lowweight_edge(G,p1,p2,edge_flag):
     return num_added
 
 
-def solve_fas_with_weighted_lp(graph,edge_flag):
+def solve_fas_with_weighted_lp(graph,edge_flag,initial=False):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_LP")
 
     model.setParam('OutputFlag', 0)  # Silent mode
+    '''
+    # Set parameters to prioritize speed over optimality
+    model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
+    model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
+    model.setParam('TimeLimit', 7200)    # Set a time limit of 30 seconds
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+    model.setParam('Cuts', 1)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('MIPFocus', 1)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
+    model.setParam('Threads', 8)       # Use 4 threads
+    model.setParam('SolutionLimit', 10)  # Stop after finding 10 feasible solutions
+
+'''
+
+
     epsilon = 1e-6  # A small constant to enforce strict inequality
     # Variables: x_uv for each edge (relaxed between 0 and 1), and p_v for each vertex v
     x = {}
@@ -621,6 +656,16 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_{u}_{v}")
 
     print("add self loop constraints")
+
+    if inital:
+        for u, v in graph.edges():
+                x[(u, v)].start = 1  # Set initial value for the edge variable
+        for (u, v) in complete_removed_list:
+            if graph.has_edge(u,v):
+                x[(u, v)].start = 0  # Set initial value for the edge variable
+
+
+
     # Optimize the model
     model.optimize()
 
@@ -713,6 +758,15 @@ def process_graph(file_path):
     removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
 
+
+    old_edge_flag=edge_flag.copy()
+    removed_weight=read_removed_edges("removed.csv",edge_flag )
+    print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
+    generage_complete_removed_list(edge_flag,edge_weights)
+    print(f"length of the complete removed list is {len(complete_removed_list)}")
+    edge_flag=old_edge_flag
+
+
     shG=G.copy()
 
 
@@ -752,7 +806,7 @@ def process_graph(file_path):
             totalsum0=0
             if  len(component) >=1000:
                         print(f"build new sub graph")
-                        sum2=solve_fas_with_weighted_lp(G_sub,edge_flag)
+                        sum2=solve_fas_with_weighted_lp(G_sub,edge_flag,True)
                         removed_weight+=sum2
                         print(f"The {numcomponent}th component, removed weight is {sum2}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
 

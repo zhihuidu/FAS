@@ -16,8 +16,29 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
+FileNameHead="ip1"
 
+
+
+
+removed_list=[]
+complete_removed_list=[]
+
+
+def generage_complete_removed_list(edge_flag,edge_weights):
+    addnum=0
+    sourceset=set()
+    targetset=set()
+    global complete_removed_list
+    complete_removed_list=[]
+    weight_list=[]
+    for (u,v),flag in edge_flag.items():
+        if flag==0:
+           complete_removed_list.append((u,v))
+           weight_list.append(edge_weights[(u,v)])
+
+    tmp_list=[x for _,x in sorted(zip(weight_list, complete_removed_list))]
+    complete_removed_list=tmp_list
 
 
 def read_num_pairs(file_path):
@@ -649,7 +670,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag):
 
 
 
-def solve_fas_with_weighted_ip(graph,edge_flag):
+def solve_fas_with_weighted_ip(graph,edge_flag,initial=False):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
  
@@ -686,6 +707,18 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_2_{u}_{v}")
 
     print(f"add no self loop  constraints")
+
+
+    if initial:
+        for u, v in graph.edges():
+                x[(u, v)].start = 1  # Set initial value for the edge variable
+        for (u, v) in complete_removed_list:
+            if graph.has_edge(u,v):
+                x[(u, v)].start = 0  # Set initial value for the edge variable
+
+
+
+
     # Optimize the model
     model.optimize()
 
@@ -746,7 +779,8 @@ def process_graph(file_path):
             subnum=0
             G_sub = shG.subgraph(component).copy()
 
-            try:
+            if len(component)<1000:
+                try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      if nx.is_directed_acyclic_graph(G_sub):
                          print("the subgraph becomes acyclic graph")
@@ -755,9 +789,21 @@ def process_graph(file_path):
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                      continue
-            except ValueError as e:
+                except ValueError as e:
                      print(f"Caught an error  {e}")
-
+            else:
+                try:
+                     removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag,True)
+                     if nx.is_directed_acyclic_graph(G_sub):
+                         print("the subgraph becomes acyclic graph")
+                     else:
+                         print("still has loop, wrong")
+                     removed_weight+=removed_weight1
+                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                     continue
+                except ValueError as e:
+                     print(f"Caught an error  {e}")
+               
 
         shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
         acyclic_flag=nx.is_directed_acyclic_graph(shG)

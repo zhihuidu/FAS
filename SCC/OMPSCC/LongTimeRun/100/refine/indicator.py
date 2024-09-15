@@ -1,11 +1,10 @@
-
-from gurobipy import Model, GRB
 import matplotlib.pyplot as plt
 from collections import Counter
 import pandas as pd
 import networkx as nx
 from networkx.algorithms.cycles import simple_cycles
 import gurobipy as gp
+from gurobipy import GRB,Model
 import sys
 import os
 from datetime import datetime
@@ -17,27 +16,8 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="lp"
+FileNameHead="Multiple-Heavy-SCC-OMP-DFS"
 
-
-removed_list=[]
-complete_removed_list=[]
-
-
-def generage_complete_removed_list(edge_flag,edge_weights):
-    addnum=0
-    sourceset=set()
-    targetset=set()
-    global complete_removed_list
-    complete_removed_list=[]
-    weight_list=[]
-    for (u,v),flag in edge_flag.items():
-        if flag==0:
-           complete_removed_list.append((u,v))
-           weight_list.append(edge_weights[(u,v)])
-
-    tmp_list=[x for _,x in sorted(zip(weight_list, complete_removed_list))]
-    complete_removed_list=tmp_list
 
 
 def read_num_pairs(file_path):
@@ -98,13 +78,17 @@ def find_cut_edges(graph, labels):
     return cut_edges
 
 
+
+
+
+
 #given a graph file in the csv format (each line is (source,destination, weight)), generate the graph data structure
 def build_ArrayDataStructure(csv_file_path):
     node_list = set()
     edges = []
     with open(csv_file_path, mode='r') as csvfile:
         csvreader = csv.reader(csvfile)
-        #next(csvreader)
+        next(csvreader)
 
         for row in csvreader:
             source, target, weight = row
@@ -135,13 +119,7 @@ def build_ArrayDataStructure(csv_file_path):
         out_adj[source].append((target, merged_edges[(source,target)]))
         in_adj[target].append((source, merged_edges[(source,target)]))
 
-    tmp_edges=merged_edges.copy()
-    tmp_edges=dict(sorted(tmp_edges.items(), key=lambda item:item[1]))
-    sorted_edges=[]
-    for (u,v), w in tmp_edges.items():
-        sorted_edges.append((u,v))
-
-    return node_list, merged_edges, in_adj, out_adj,sorted_edges
+    return node_list, merged_edges, in_adj, out_adj 
 
 
 def build_from_EdgeAndFlag(edge_weights,edge_flag):
@@ -236,42 +214,6 @@ def write_config(fixcyclelen,mincyclelen,numcycles,maxcyclelen,subcomponentsize,
             f.write(f"{fixcyclelen},{mincyclelen},{numcycles},{maxcyclelen},{subcomponentsize},{heavysetsize} \n")
 
 num=0
-
-#remove cycle in G and update edge_flag
-def solve_ip_cycles(G,cycles,edge_flag,edge_weights):
-    global num
-    removed_weight=0
-    model = gp.Model("min_feedback_arc_set")
-    model.setParam('OutputFlag', 0)  # Silent mode
-
-    # Create binary variables for each edge
-    edge_vars = {}
-    edge_set=set()
-    for cycle in cycles:
-        edge_set.update({(cycle[i], cycle[(i+1) % len(cycle)]) for i in range(len(cycle))})
-
-    for u, v in list(edge_set):
-        edge_vars[(u, v)] = model.addVar(vtype=GRB.BINARY, obj=edge_weights[(u,v)])
-    print(f"we have {len(edge_set)} variables")
-
-    for cycle in cycles:
-        #print(f"the cycle is {cycle}")
-        cycle_edges = [(cycle[i], cycle[(i+1) % len(cycle)]) for i in range(len(cycle))]
-        model.addConstr(gp.quicksum(edge_vars[edge] for edge in cycle_edges) >= 1)
-    print(f"we have {len(cycles)} constraints")
-
-    # Optimize the model
-    model.optimize()
-
-    # Get the edges to be removed
-    for edge, var in edge_vars.items():
-            if var.x > 0.5:
-               if edge_flag[(edge[0],edge[1])]==1:
-                    removed_weight+=edge_weights[(edge[0],edge[1])]
-                    edge_flag[(edge[0],edge[1])]=0
-                    G.remove_edge(edge[0],edge[1])
-                    num+=1
-    return removed_weight
 
 #remove cycle in G and update edge_flag
 def solve_ip_scc(G,edge_flag,SuperG):
@@ -612,15 +554,6 @@ def addback_edge(G,weight,edge_flag):
             num_added+=1
     return num_added
 
-def addback_interval_edge(G,lw,hw,edge_flag):
-    num_added=0
-    for u,v,data in G.edges(data=True):
-        if lw<=data['weight'] and data['weight'] <hw:
-            edge_flag[(u,v)]=1
-            num_added+=1
-    return num_added
-
-
 def addback_highdegree_lowweight_edge(G,p1,p2,edge_flag):
     # Calculate in-degree, out-degree, in-weight, and out-weight
     in_degrees = dict(G.in_degree())
@@ -649,27 +582,12 @@ def addback_highdegree_lowweight_edge(G,p1,p2,edge_flag):
             #print(f"({u},{v},{data['weight']} indegree={in_degrees[u]} max in degree {in_degree_stats[1]}, max out degree {out_degree_stats[1]} outdegree={out_degrees[v]},average in weight {in_weight_stats[2]} average out weight {out_weight_stats[2]}")
     return num_added
 
-def find_cycles_include_edge_list(G,elist,edge_weights):
-        cycles=[]
-        for i in range(len(elist)):
-                  u,v=elist[i]
-                  if G.has_edge(u,v):
-                      G.remove_edge(u,v)
-                  all_paths=list(nx.all_simple_paths(G,v,u))
-                  G.add_edge(u,v,weight=edge_weights[(u,v)])
-                  for path in all_paths:
-                      cylcle=[u]+path
-                      cycles.append(cycle)
-        return cycles
 
-
-
-
-
-def solve_fas_with_weighted_lp(graph,initial=False):
+def solve_fas_with_weighted_lp(graph,edge_flag):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_LP")
 
+    model.setParam('OutputFlag', 0)  # Silent mode
     epsilon = 1e-6  # A small constant to enforce strict inequality
     # Variables: x_uv for each edge (relaxed between 0 and 1), and p_v for each vertex v
     x = {}
@@ -693,8 +611,7 @@ def solve_fas_with_weighted_lp(graph,initial=False):
     # Constraints: Linear ordering constraints (relaxed for fractional x_uv)
     for u, v in graph.edges():
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
-        model.addConstr(p[u] + 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
-
+        model.addConstr(p[u] + 0.001 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     '''
     print("add p constraints")
     # Constraints: Cycle elimination (no bidirectional edges, also relaxed)
@@ -704,45 +621,40 @@ def solve_fas_with_weighted_lp(graph,initial=False):
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_{u}_{v}")
 
     print("add self loop constraints")
-'''
-
-
-    if initial:
-        for u, v in graph.edges():
-                x[(u, v)].start = 1  # Set initial value for the edge variable
-        for (u, v) in complete_removed_list:
-            if graph.has_edge(u,v):
-                x[(u, v)].start = 0  # Set initial value for the edge variable
-
-
-
+    '''
     # Optimize the model
     model.optimize()
 
     print("after optimization")
     # Retrieve the fractional edge removal solution
     #fractional_edges = { (u, v): x[(u, v)].x for u, v in graph.edges() }
-    up_bound = sum(graph[u][v]['weight'] * x[(u, v)] for u, v in graph.edges())
-
+    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.2 )
 
     # Retrieve the linear ordering based on the positions of vertices (p_v)
     vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
 
     # Apply rounding to get the final optimal result (binary solution for edge removal)
-    removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
+    #removed_edges = [(u, v) for u, v in graph.edges() if fractional_edges[(u, v)] < 0.5]
+    for u, v in graph.edges() :
+        if x[(u, v)].x < 0.2:
+            edge_flag[(u,v)]=0
+
+    # Apply rounding to get the final optimal result (binary solution for edge removal)
+    #removed_edges = [(u, v) for u, v in graph.edges() if fractional_edges[(u, v)] < 0.5]
 
     # Final vertex ordering
-    final_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
+    #final_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
 
-    return removed_edges, final_ordering, up_bound
+    return removed_weight
 
 
 
-def solve_fas_with_weighted_ip(graph):
+def solve_fas_with_weighted_ip(graph,edge_flag):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
     epsilon = 1e-6  # A small constant to enforce strict inequality
  
+    model.setParam('OutputFlag', 0)  # Silent mode
     # Variables: x_uv for each edge (binary), and p_v for each vertex (position)
     x = {}
     p = {}
@@ -762,67 +674,208 @@ def solve_fas_with_weighted_ip(graph):
     # Constraints: Linear ordering constraints for cycle elimination (no cycles)
     for u, v in graph.edges():
         # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
-
+        model.addConstr(p[u]+ 0.01 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
     '''
     # Constraints: For every bidirectional edge (u, v) and (v, u), ensure that at least one is removed
     for u, v in graph.edges():
         if (v, u) in graph.edges():
             model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_2_{u}_{v}")
 '''
-
     # Optimize the model
     model.optimize()
 
     # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
-    removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
+    #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
+    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.5 )
 
+    for u, v in graph.edges() :
+        if x[(u, v)].x < 0.5:
+            edge_flag[(u,v)]=0
     # Retrieve the linear ordering based on the positions of vertices (p_v)
-    vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
+    #vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
 
-    up_bound = sum(graph[u][v]['weight'] * x[(u, v)] for u, v in graph.edges())
+    #up_bound = sum(graph[u][v]['weight'] * x[(u, v)] for u, v in graph.edges())
 
-    return removed_edges, vertex_ordering, up_bound
-
-
+    return removed_weight
 
 
 
+def solve_indicator(graph,edge_flag):
+    # Initialize the Gurobi model
+    model = gp.Model("MaxWeightDirectedGraph")
+    model.setParam('OutputFlag', 0)  # Silent mode
+
+    # Variables: continuous labels for each node, and binary values for each edge
+    p = {}  # Continuous label for each node
+    x = {}  # Binary variable for each edge (0 or 1)
+
+    epsilon = 1e-6  # Small constant to ensure strict inequality
+
+
+    M=len(graph.nodes())
+    # Create continuous label variables for each node
+    for v in graph.nodes():
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
+
+    print(f"add p variable")
+    # Create binary variables for each edge and add indicator constraints
+    for u, v in graph.edges():
+        x[(u, v)] = model.addVar(vtype=GRB.BINARY, name=f"x_{u}_{v}")
+
+
+    for u, v in graph.edges():
+        # If x_uv = 0, enforce p_u >= p_v + epsilon (i.e., p_u > p_v)
+        model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
+        # If x_uv = 1, enforce p_u + epsilon <= p_v (i.e., p_u < p_v)
+        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 0.1  <= p[v], name=f"keep_edge_{u}_{v}")
+
+
+
+    print(f"add edge variable and indicator")
+    # Objective: maximize the total weight of the kept edges
+    model.setObjective(gp.quicksum(graph[u][v]['weight'] *(1- x[(u, v)]) for u, v in graph.edges()), GRB.MINIMIZE)
+
+    print(f"add objective")
+    # Optimize the model
+    model.optimize()
+
+    print(f"optimization")
+    # Retrieve results
+    removed_weight=0
+    removededge=[]
+    for u, v in graph.edges() :
+        print(f"x[({u},{v})].x is {x[(u,v)].x}")
+        print(f"p[{u}] is {p[u].x}, p[{v}] is {p[v].x}")
+        if x[(u, v)].x < 0.5:
+            edge_flag[u,v]=0
+            removed_weight+=graph[u][v]['weight']
+            removededge.append((u,v))
+    for (u,v) in removededge:
+        graph.remove_edge(u,v)
+    #node_labels = {v: p[v].x for v in graph.nodes()}
+
+    return removed_weight
+
+
+def solve_indicator_linear(graph,edge_flag):
+    # Initialize the Gurobi model
+    model = gp.Model("MaxWeightDirectedGraph")
+    model.setParam('OutputFlag', 0)  # Silent mode
+
+    # Variables: continuous labels for each node, and binary values for each edge
+    p = {}  # Continuous label for each node
+    x = {}  # Binary variable for each edge (0 or 1)
+
+    epsilon = 1e-6  # Small constant to ensure strict inequality
+
+
+    M=len(graph.nodes())
+    # Create continuous label variables for each node
+    for v in graph.nodes():
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
+
+    print(f"add p variable")
+    # Create binary variables for each edge and add indicator constraints
+    for u, v in graph.edges():
+        x[(u, v)] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=1, name=f"x_{u}_{v}")
+
+
+    for u, v in graph.edges():
+        # If x_uv = 0, enforce p_u >= p_v + epsilon (i.e., p_u > p_v)
+        model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
+        # If x_uv = 1, enforce p_u + epsilon <= p_v (i.e., p_u < p_v)
+        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 0.1  <= p[v], name=f"keep_edge_{u}_{v}")
+
+
+
+    print(f"add edge variable and indicator")
+    # Objective: maximize the total weight of the kept edges
+    model.setObjective(gp.quicksum(graph[u][v]['weight'] *(1- x[(u, v)]) for u, v in graph.edges()), GRB.MINIMIZE)
+
+    print(f"add objective")
+    # Optimize the model
+    model.optimize()
+
+    print(f"optimization")
+    # Retrieve results
+    removed_weight=0
+    removededge=[]
+    for u, v in graph.edges() :
+        print(f"x[({u},{v})].x is {x[(u,v)].x}")
+        print(f"p[{u}] is {p[u].x}, p[{v}] is {p[v].x}")
+        if x[(u, v)].x < 0.5:
+            edge_flag[u,v]=0
+            removed_weight+=graph[u][v]['weight']
+            removededge.append((u,v))
+    for (u,v) in removededge:
+        graph.remove_edge(u,v)
+    #node_labels = {v: p[v].x for v in graph.nodes()}
+
+    return removed_weight
 
 def process_graph(file_path):
     print(f"read data")
-    node_list, edge_weights, in_edges, out_edges,sorted_edges = build_ArrayDataStructure(file_path)
+    node_list, edge_weights, in_edges, out_edges = build_ArrayDataStructure(file_path)
     G=build_from_EdgeList(edge_weights)
     total=sum(edge_weights[(u,v)] for (u,v) in edge_weights)
     print(f"total number of nodes={len(node_list)}, total number of edges={len(edge_weights)}")
     print(f"sum of weight={total}")
 
-    edge_flag=[]
-    for (u,v) in edge_weights:
-        edge_flag[(u,v)]=1
+    removed_weight=0
+    edge_flag={(u,v):1 for (u,v) in edge_weights }
 
-    old_edge_flag=edge_flag.copy()
-    removed_weight=read_removed_edges("removed.csv",edge_flag )
-    print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
-    generage_complete_removed_list(edge_flag,edge_weights)
-    print(f"length of the complete removed list is {len(complete_removed_list)}")
-    edge_flag=old_edge_flag
+    shG=G.copy()
 
 
-    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True)
-    print(f"up bound is {up_bound}")
+    numcheckacyclic=0
+    acyclic_flag=nx.is_directed_acyclic_graph(shG)
+    addback_flag=False
+    while not acyclic_flag :
+        scc=list(nx.strongly_connected_components(shG))
+        print(f"number of scc is {len(scc)}")
 
-    mapping = vertex_ordering
+        numcomponent=0
+        oldnum=num
+        numcheckacyclic+=1
 
-    print(f"write file")
-    current_time = datetime.now()
-    time_string = current_time.strftime("%Y%m%d_%H%M%S")
-    output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
-    write_relabelled_nodes_to_file(mapping, output_file)
-    output_file = f"{FileNameHead}-removed-edge-{time_string}.csv"
-    with open(output_file, 'w') as f:
-        for u,v in removed_edges:
-            f.write(f"{u},{v},{G[u][v]['weight']}\n")
+        for component in scc:
+            if len(component)==1:
+                 continue
+
+            numcomponent+=1
+            print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
+            subnum=0
+            G_sub = shG.subgraph(component).copy()
+            if 1==1:
+                try:
+                     removed_weight1=solve_indicator_linear(G_sub,edge_flag)
+                     removed_weight+=removed_weight1
+                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                     acyclic_flag=nx.is_directed_acyclic_graph(G_sub)
+                     if acyclic_flag :
+                         print("no cycle")
+                     else:
+                         print("still has cycles, wrong")
+                except ValueError as e:
+                     print(f"Caught an error  {e}")
+
+
+
+        shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
+        acyclic_flag=nx.is_directed_acyclic_graph(shG)
+
+    print(f"relabel dag")
+    shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
+    acyclic_flag=nx.is_directed_acyclic_graph(shG)
+    if acyclic_flag:
+        mapping = relabel_dag(shG)
+        print(f"write file")
+        current_time = datetime.now()
+        time_string = current_time.strftime("%Y%m%d_%H%M%S")
+        output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
+        write_relabelled_nodes_to_file(mapping, output_file)
+    else:
+        print(f"not acyclic graph")
 
 
 file_path = sys.argv[1]
