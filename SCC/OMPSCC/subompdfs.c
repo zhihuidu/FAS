@@ -16,7 +16,7 @@ int MIN_CYCLE_LENGTH=2;
 long int ALL_CYCLE_NUM=5;
 int MAX_SEARCH_LEN=2000;
 time_t start_time,end_time;
-int time_threshold=15;
+int time_threshold=120;
 
 typedef struct {
     int source;
@@ -762,6 +762,26 @@ int main(int argc, char * argv[]) {
         }
     }
     fclose(output_file);
+
+
+    // Output removed edges to a file
+    output_file = fopen("reduced.csv", "w");
+    if (output_file == NULL) {
+        printf("Error: Cannot open file %s for writing\n", output_filename);
+        exit(1);
+    }
+    removed_edge_num=0;
+    removed_edge_weight=0;
+    for (int i = 0; i < graph.num_edges; i++) {
+        if (removed_edges[i] != true) {
+            fprintf(output_file, "%ld,%ld,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
+            removed_edge_num+=1;
+            removed_edge_weight+=graph.edges[i].weight;
+        }
+    }
+    fclose(output_file);
+
+
     printf("OMP subprogram Removed %d edges with weight sum %d\n", removed_edge_num,removed_edge_weight);
     printf("-------------------------------------------------------------\n");
 

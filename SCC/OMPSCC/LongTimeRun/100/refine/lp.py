@@ -19,6 +19,11 @@ import matplotlib.pyplot as plt
 
 FileNameHead="lp"
 
+# Set Gurobi license information using environment variables
+os.environ['GRB_WLSACCESSID'] = 'd051c581-fa20-4960-a4fe-4a10026018c5'
+os.environ['GRB_WLSSECRET'] = 'b2f5f047-f697-4b38-987d-44371d5a4e5f'
+os.environ['GRB_LICENSEID'] = '2540055'
+
 
 removed_list=[]
 complete_removed_list=[]
@@ -668,7 +673,13 @@ def find_cycles_include_edge_list(G,elist,edge_weights):
 
 def solve_fas_with_weighted_lp(graph,initial=False):
     # Initialize the Gurobi model
+    # Set Gurobi license information using environment variables
+    os.environ['GRB_WLSACCESSID'] = 'd051c581-fa20-4960-a4fe-4a10026018c5'
+    os.environ['GRB_WLSSECRET'] = 'b2f5f047-f697-4b38-987d-44371d5a4e5f'
+    os.environ['GRB_LICENSEID'] = '2540055'
+
     model = Model("FeedbackArcSet_Weighted_LP")
+    
 
     epsilon = 1e-6  # A small constant to enforce strict inequality
     # Variables: x_uv for each edge (relaxed between 0 and 1), and p_v for each vertex v

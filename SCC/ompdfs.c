@@ -550,6 +550,11 @@ int main(int argc, char * argv[]) {
         printf("Error: Cannot open file %s for writing\n", output_filename);
         exit(1);
     }
+    FILE* output_file1 = fopen("reduced.csv", "w");
+    if (output_file1 == NULL) {
+        printf("Error: Cannot open file reduced.csv for writing\n");
+        exit(1);
+    }
     FILE* output_loss_file = fopen(loss_filename, "w");
     if (output_loss_file == NULL) {
         printf("Error: Cannot open file %s for writing\n", loss_filename);
@@ -562,11 +567,14 @@ int main(int argc, char * argv[]) {
             fprintf(output_file, "%ld,%ld,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
             removed_edge_num+=1;
             removed_edge_weight+=graph.edges[i].weight;
-        }
+        } else {
+            fprintf(output_file1, "%ld,%ld,%d\n", graph.edges[i].source, graph.edges[i].target,graph.edges[i].weight);
+	}
         fprintf(output_loss_file, "%ld,%ld,%ld\n", graph.edges[i].source, graph.edges[i].target,shared_weights[i]);
     }
 
     fclose(output_file);
+    fclose(output_file1);
     fclose(output_loss_file);
 
 
