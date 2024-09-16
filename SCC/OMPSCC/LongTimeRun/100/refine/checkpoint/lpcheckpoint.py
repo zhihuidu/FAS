@@ -135,7 +135,7 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
 
     model = Model("FeedbackArcSet_Weighted_LP")
     
-    model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
+    model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
@@ -248,7 +248,8 @@ def process_graph(file_path,precondition):
         print(f"length of the complete removed list is {len(complete_removed_list)}")
         edge_flag=old_edge_flag
 
-    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,"lpcheckpoint.mst")
+    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,None)
+    #removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,"lpcheckpoint.mst")
     print(f"up bound is {up_bound}")
     if up_bound != 0:
         removed_weight= sum(edge_weights[(u,v)]  for u, v in removed_edges )

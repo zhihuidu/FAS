@@ -159,7 +159,6 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
  
     model.setParam('OutputFlag', 0)  # Silent mode
 
-    model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
