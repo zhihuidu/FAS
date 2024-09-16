@@ -684,7 +684,7 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
 
     model = Model("FeedbackArcSet_Weighted_LP")
     
-    model.setParam('TimeLimit', 120)    # Set a time limit of 30 seconds
+    model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
@@ -756,19 +756,25 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
 
 
     print("after optimization")
-    # Retrieve the fractional edge removal solution
-    #fractional_edges = { (u, v): x[(u, v)].x for u, v in graph.edges() }
-    up_bound = sum(graph[u][v]['weight'] * x[(u, v)] for u, v in graph.edges())
+
+    up_bound = 0
+    final_ordering = set()
+    removed_edges = []
+    # Check if the optimization was successful
+    if model.status == GRB.OPTIMAL or model.status == GRB.SUBOPTIMAL:
+        # Retrieve the fractional edge removal solution
+        #fractional_edges = { (u, v): x[(u, v)].x for u, v in graph.edges() }
+        up_bound = sum(graph[u][v]['weight'] * x[(u, v)].X for u, v in graph.edges())
 
 
-    # Retrieve the linear ordering based on the positions of vertices (p_v)
-    vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
+        # Retrieve the linear ordering based on the positions of vertices (p_v)
+        vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].X)
 
-    # Apply rounding to get the final optimal result (binary solution for edge removal)
-    removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
+        # Apply rounding to get the final optimal result (binary solution for edge removal)
+        removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].X < 0.5]
 
-    # Final vertex ordering
-    final_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
+        # Final vertex ordering
+        final_ordering = sorted(graph.nodes(), key=lambda v: p[v].X)
 
     return removed_edges, final_ordering, up_bound
 
@@ -837,31 +843,32 @@ def process_graph(file_path):
     print(f"sum of weight={total}")
 
     edge_flag={(u,v):1 for (u,v) in edge_weights }
-
+    '''
     old_edge_flag=edge_flag.copy()
     removed_weight=read_removed_edges("removed.csv",edge_flag )
     print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
     generage_complete_removed_list(edge_flag,edge_weights)
     print(f"length of the complete removed list is {len(complete_removed_list)}")
     edge_flag=old_edge_flag
-
-
-    model, removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,None)
+'''
+    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,"lpcheckpoint.mst")
     print(f"up bound is {up_bound}")
-    removed_weight= sum(edge_weights[(u,v)]  for u, v in removed_edges )
-    if removed_weight/total > 0.85 :
+    if up_bound != 0:
+        removed_weight= sum(edge_weights[(u,v)]  for u, v in removed_edges )
+        if removed_weight/total < 0.15 :
+            mapping={}
+            for i in range(len(vertex_ordering)):
+                mapping[vertex_ordering[i]]=i
 
-        mapping = vertex_ordering
-
-        print(f"write file")
-        current_time = datetime.now()
-        time_string = current_time.strftime("%Y%m%d_%H%M%S")
-        output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
-        write_relabelled_nodes_to_file(mapping, output_file)
-        output_file = f"{FileNameHead}-removed-edge-{time_string}.csv"
-        with open(output_file, 'w') as f:
-            for u,v in removed_edges:
-                f.write(f"{u},{v},{G[u][v]['weight']}\n")
+            print(f"write file")
+            current_time = datetime.now()
+            time_string = current_time.strftime("%Y%m%d_%H%M%S")
+            output_file = f"{FileNameHead}-Relabel-{time_string}.csv"
+            write_relabelled_nodes_to_file(mapping, output_file)
+            output_file = f"{FileNameHead}-removed-edge-{time_string}.csv"
+            with open(output_file, 'w') as f:
+                for u,v in removed_edges:
+                    f.write(f"{u},{v},{G[u][v]['weight']}\n")
 
 file_path = sys.argv[1]
 sys.setrecursionlimit(900000)
