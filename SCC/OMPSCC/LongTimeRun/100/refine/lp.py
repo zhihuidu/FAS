@@ -821,7 +821,9 @@ def process_graph(file_path):
     removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True)
     print(f"up bound is {up_bound}")
 
-    mapping = vertex_ordering
+    mapping={}
+    for i in range(len(vertex_ordering)):
+            mapping[vertex_ordering[i]]=i
 
     print(f"write file")
     current_time = datetime.now()

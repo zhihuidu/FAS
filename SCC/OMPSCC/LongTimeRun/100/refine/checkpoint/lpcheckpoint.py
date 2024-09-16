@@ -129,17 +129,14 @@ def save_checkpoint(model, filename):
 def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
     # Initialize the Gurobi model
     # Set Gurobi license information using environment variables
-    os.environ['GRB_WLSACCESSID'] = 'd051c581-fa20-4960-a4fe-4a10026018c5'
-    os.environ['GRB_WLSSECRET'] = 'b2f5f047-f697-4b38-987d-44371d5a4e5f'
-    os.environ['GRB_LICENSEID'] = '2540055'
 
     model = Model("FeedbackArcSet_Weighted_LP")
     
-    model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     '''
-    model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
+    model.setParam('TimeLimit', 216000)    # Set a time limit of less than three days
+    model.setParam('CKMUTIME', 50)  # Save checkpoint every 600 seconds (10 minutes)
     # Set parameters to prioritize speed over optimality
-    #model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
+    model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
     model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
     model.setParam('Presolve', 2)      # Use aggressive presolve
     model.setParam('Cuts', 1)          # Moderate cut generation, larger cuts will be slow
@@ -173,22 +170,10 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
         model.addConstr(p[u] + 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
 
-    '''
-    print("add p constraints")
-    # Constraints: Cycle elimination (no bidirectional edges, also relaxed)
-    for u, v in graph.edges():
-        if (v, u) in graph.edges():
-            # We can't have both (u, v) and (v, u) fully present, but fractions are allowed
-            model.addConstr(x[(u, v)] + x[(v, u)] <= 1, f"no_cycle_{u}_{v}")
-
-    print("add self loop constraints")
-'''
     if checkpoint_file:
         print(f"Loading checkpoint from {checkpoint_file}")
         model.read(checkpoint_file)
 
-        # Optimize the model
-        model.optimize()
     else:
 
         if initial:
@@ -198,13 +183,14 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
                 if graph.has_edge(u,v):
                     x[(u, v)].start = 0  # Set initial value for the edge variable
 
-        # Optimize the model
-        model.optimize()
+    # Optimize the model
+    model.optimize()
 
-        # Save checkpoint if optimization is interrupted
-        if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
-            save_checkpoint(model, 'lpcheckpoint.mst')
-
+    '''
+    # Save checkpoint if optimization is interrupted
+    if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
+            save_checkpoint(model, 'lpcheckpoint.ckp')
+'''
 
     print("after optimization")
 
@@ -248,7 +234,8 @@ def process_graph(file_path,precondition):
         print(f"length of the complete removed list is {len(complete_removed_list)}")
         edge_flag=old_edge_flag
 
-    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,"lpcheckpoint.mst")
+    #removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,True,None)
+    removed_edges, vertex_ordering, up_bound=solve_fas_with_weighted_lp(G,False,"lpcheckpoint.ckp")
     print(f"up bound is {up_bound}")
     if up_bound != 0:
         removed_weight= sum(edge_weights[(u,v)]  for u, v in removed_edges )
