@@ -751,9 +751,9 @@ def solve_indicator(graph,edge_flag):
 
     for u, v in graph.edges():
         # If x_uv = 0, enforce p_u >= p_v + epsilon (i.e., p_u > p_v)
-        model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
+        #model.addGenConstrIndicator(x[(u, v)], False, p[u] >= p[v] , name=f"remove_edge_{u}_{v}")
         # If x_uv = 1, enforce p_u + epsilon <= p_v (i.e., p_u < p_v)
-        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 0.1  <= p[v], name=f"keep_edge_{u}_{v}")
+        model.addGenConstrIndicator(x[(u, v)], True, p[u] + 1  <= p[v], name=f"keep_edge_{u}_{v}")
 
 
 
@@ -852,8 +852,8 @@ def solve_indicator_linear(graph,edge_flag,initial=False):
     removed_weight=0
     removededge=[]
     for u, v in graph.edges() :
-        print(f"x[({u},{v})].x is {x[(u,v)].x}")
-        print(f"p[{u}] is {p[u].x}, p[{v}] is {p[v].x}")
+        print(f"x[({u},{v})].x is {x[(u,v)].X}")
+        print(f"p[{u}] is {p[u].X}, p[{v}] is {p[v].X}")
         if x[(u, v)].x < 0.5:
             edge_flag[u,v]=0
             removed_weight+=graph[u][v]['weight']
@@ -864,24 +864,28 @@ def solve_indicator_linear(graph,edge_flag,initial=False):
 
     return removed_weight
 
-def process_graph(file_path):
+
+
+def process_graph(file_path,precondition):
     print(f"read data")
-    node_list, edge_weights, in_edges, out_edges = build_ArrayDataStructure(file_path)
+    node_list, edge_weights, in_edges, out_edges= build_ArrayDataStructure(file_path)
     G=build_from_EdgeList(edge_weights)
     total=sum(edge_weights[(u,v)] for (u,v) in edge_weights)
     print(f"total number of nodes={len(node_list)}, total number of edges={len(edge_weights)}")
     print(f"sum of weight={total}")
 
-    removed_weight=0
     edge_flag={(u,v):1 for (u,v) in edge_weights }
+    removed_weight=0
+    if precondition==1:
+        old_edge_flag=edge_flag.copy()
+        removed_weight=read_removed_edges("removed.csv",edge_flag )
+        print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
+        generate_complete_removed_list(edge_flag,edge_weights)
+        print(f"length of the complete removed list is {len(complete_removed_list)}")
+        edge_flag=old_edge_flag
 
-    old_edge_flag=edge_flag.copy()
-    removed_weight=read_removed_edges("removed.csv",edge_flag )
-    print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
-    generage_complete_removed_list(edge_flag,edge_weights)
-    print(f"length of the complete removed list is {len(complete_removed_list)}")
-    edge_flag=old_edge_flag
-    
+
+
 
     shG=G.copy()
 
@@ -905,7 +909,7 @@ def process_graph(file_path):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
             G_sub = shG.subgraph(component).copy()
-            if len(component)<1000:
+            if len(component)<1:
                 try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      removed_weight+=removed_weight1
@@ -951,6 +955,7 @@ def process_graph(file_path):
 
 
 file_path = sys.argv[1]
+precondition = int(sys.argv[2])
 sys.setrecursionlimit(900000)
-process_graph(file_path)
+process_graph(file_path,precondition)
 

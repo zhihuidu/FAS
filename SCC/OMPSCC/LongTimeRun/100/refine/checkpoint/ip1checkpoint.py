@@ -157,7 +157,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
  
-    model.setParam('OutputFlag', 0)  # Silent mode
+    model.setParam('OutputFlag', 1)  # Silent mode
 
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
