@@ -783,12 +783,12 @@ def solve_indicator(graph,edge_flag):
     return removed_weight
 
 
-def solve_indicator_linear(graph,edge_flag,initial=False):
+def solve_indicator_half_linear(graph,edge_flag,initial=False):
     # Initialize the Gurobi model
     model = gp.Model("MaxWeightDirectedGraph")
-    model.setParam('OutputFlag', 0)  # Silent mode
+    #model.setParam('OutputFlag', 0)  # Silent mode
 
-
+    '''
     # Set parameters to prioritize speed over optimality
     model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
     #model.setParam('TimeLimit', 7200)    # Set a time limit of 30 seconds
@@ -797,7 +797,7 @@ def solve_indicator_linear(graph,edge_flag,initial=False):
     model.setParam('MIPFocus', 1)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
     #model.setParam('Threads', 8)       # Use 8 threads
     model.setParam('SolutionLimit', 10)  # Stop after finding 10 feasible solutions
-
+'''
 
 
     # Variables: continuous labels for each node, and binary values for each edge
@@ -815,7 +815,7 @@ def solve_indicator_linear(graph,edge_flag,initial=False):
     print(f"add p variable")
     # Create binary variables for each edge and add indicator constraints
     for u, v in graph.edges():
-        x[(u, v)] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=1, name=f"x_{u}_{v}")
+        x[(u, v)] = model.addVar(vtype=GRB.BINARY,lb=0,ub=1, name=f"x_{u}_{v}")
 
 
     for u, v in graph.edges():
@@ -854,7 +854,7 @@ def solve_indicator_linear(graph,edge_flag,initial=False):
     for u, v in graph.edges() :
         print(f"x[({u},{v})].x is {x[(u,v)].X}")
         print(f"p[{u}] is {p[u].X}, p[{v}] is {p[v].X}")
-        if x[(u, v)].x < 0.5:
+        if x[(u, v)].X < 0.5:
             edge_flag[u,v]=0
             removed_weight+=graph[u][v]['weight']
             removededge.append((u,v))
@@ -909,7 +909,7 @@ def process_graph(file_path,precondition):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             subnum=0
             G_sub = shG.subgraph(component).copy()
-            if len(component)<1:
+            if len(component)<1000:
                 try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      removed_weight+=removed_weight1
@@ -923,7 +923,7 @@ def process_graph(file_path,precondition):
                      print(f"Caught an error  {e}")
             else:
                 try:
-                     removed_weight1=solve_indicator_linear(G_sub,edge_flag,True)
+                     removed_weight1=solve_indicator_half_linear(G_sub,edge_flag,True)
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
                      acyclic_flag=nx.is_directed_acyclic_graph(G_sub)
