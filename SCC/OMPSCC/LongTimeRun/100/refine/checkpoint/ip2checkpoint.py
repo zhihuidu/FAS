@@ -229,9 +229,9 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=Non
 
         # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
         #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
-        removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].X < 0.5 )
+        removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].X < 1-epsilon )
         for u, v in graph.edges():
-            if x[(u, v)].X < 0.2 :
+            if x[(u, v)].X < 1-epsilon :
                 edge_flag[(u,v)]=0
                 removed_edges.append((u,v))
                 removed_weight+=graph[u][v]['weight']
@@ -327,7 +327,7 @@ def process_graph(file_path,precondition):
             numcomponent+=1
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             G_sub = shG.subgraph(component).copy()
-            if len(component)<1000:
+            if len(component)<100:
                 try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      removed_weight+=removed_weight1
@@ -338,15 +338,11 @@ def process_graph(file_path,precondition):
             else:
                 try:
                      removed_weight1=solve_fas_with_weighted_lp(G_sub,edge_flag,True,None)
-                     if removed_weight1==0:
-                         acyclic_flag=True
-                         removed_weight=0
-                         break
-                     else :
-                         if nx.is_directed_acyclic_graph(G_sub):
+                     acyclic_flag= nx.is_directed_acyclic_graph(G_sub)
+                     if acyclic_flag:
                              print("the subgraph becomes acyclic graph")
-                         else:
-                             print("still has loop, wrong")
+                     else:
+                             print("still has loop after lp")
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
 

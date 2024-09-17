@@ -205,15 +205,17 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
         up_bound = sum(graph[u][v]['weight'] * x[(u, v)].X for u, v in graph.edges())
 
 
-        # Retrieve the linear ordering based on the positions of vertices (p_v)
-        vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].X)
-
         # Apply rounding to get the final optimal result (binary solution for edge removal)
         removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].X < 0.5]
 
         # Final vertex ordering
         final_ordering = sorted(graph.nodes(), key=lambda v: p[v].X)
-
+        '''
+        for u,v in graph.edges():
+            print(f"X[{u},{v}] is {x[(u,v)].X}")
+        for v in final_ordering:
+            print(f"p[{v}] is {p[v].X} ")
+'''
     return removed_edges, final_ordering, up_bound
 
 
