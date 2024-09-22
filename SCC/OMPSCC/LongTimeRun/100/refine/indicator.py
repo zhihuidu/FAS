@@ -24,7 +24,7 @@ removed_list=[]
 complete_removed_list=[]
 
 
-def generage_complete_removed_list(edge_flag,edge_weights):
+def generate_complete_removed_list(edge_flag,edge_weights):
     addnum=0
     sourceset=set()
     targetset=set()

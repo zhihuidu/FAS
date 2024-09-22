@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 
 FileNameHead="ip1"
 
+os.environ['GRB_USE_WLS'] = '1'
 # Set Gurobi license information using environment variables
 os.environ['GRB_WLSACCESSID'] = 'd051c581-fa20-4960-a4fe-4a10026018c5'
 os.environ['GRB_WLSSECRET'] = 'b2f5f047-f697-4b38-987d-44371d5a4e5f'

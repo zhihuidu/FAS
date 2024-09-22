@@ -672,7 +672,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False):
     print("after optimization")
     # Retrieve the fractional edge removal solution
     #fractional_edges = { (u, v): x[(u, v)].x for u, v in graph.edges() }
-    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.2 )
+    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.9 )
 
     # Retrieve the linear ordering based on the positions of vertices (p_v)
     vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
@@ -680,7 +680,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False):
     # Apply rounding to get the final optimal result (binary solution for edge removal)
     #removed_edges = [(u, v) for u, v in graph.edges() if fractional_edges[(u, v)] < 0.5]
     for u, v in graph.edges() :
-        if x[(u, v)].x < 0.2:
+        if x[(u, v)].x < 0.9:
             edge_flag[(u,v)]=0
 
     # Apply rounding to get the final optimal result (binary solution for edge removal)

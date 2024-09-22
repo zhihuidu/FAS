@@ -16,13 +16,15 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
-FileNameHead="ip1CheckPoint"
+FileNameHead="ip-lp"
 
 # Set Gurobi license information using environment variables
-os.environ['GRB_WLSACCESSID'] = 'd051c581-fa20-4960-a4fe-4a10026018c5'
-os.environ['GRB_WLSSECRET'] = 'b2f5f047-f697-4b38-987d-44371d5a4e5f'
+os.environ['GRB_WLSACCESSID'] = 'fb436391-3bb5-4b06-9a8c-66f0354b5011'
+os.environ['GRB_WLSSECRET'] = '37c29f28-6ae4-4a19-913d-6b8100964563'
 os.environ['GRB_LICENSEID'] = '2540055'
 
+# Optional: Disable the local license check by unsetting GRB_LICENSE_FILE
+os.environ.pop('GRB_LICENSE_FILE', None)
 
 
 removed_list=[]
@@ -52,7 +54,7 @@ def build_ArrayDataStructure(csv_file_path):
     edges = []
     with open(csv_file_path, mode='r') as csvfile:
         csvreader = csv.reader(csvfile)
-        next(csvreader)
+        #next(csvreader)
 
         for row in csvreader:
             source, target, weight = row
@@ -146,19 +148,19 @@ def write_removed_edges(output_file,edge_flag,edge_weights):
             if edge_flag[(u,v)]==0:
                 f.write(f"{u},{v},{edge_weights[(u,v)]}\n")
 
+
 def save_checkpoint(model, filename):
     """Save the current MIP start file."""
     # Save the current solution to a .mst file
     model.write(filename)
 
 
-
-def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=None):
+def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=None):
     # Initialize the Gurobi model
-    model = Model("FeedbackArcSet_Weighted_IP")
- 
-    model.setParam('OutputFlag', 1)  # Silent mode
+    model = Model("FeedbackArcSet_Weighted_LP")
 
+    # Set parameters to prioritize speed over optimality
+    #model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
@@ -171,40 +173,36 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
     model.setParam('SolutionLimit', 10)  # Stop after finding 10 feasible solutions
 '''
 
-    
     epsilon = 1e-6  # A small constant to enforce strict inequality
-    # Variables: x_uv for each edge (binary), and p_v for each vertex (position)
+    # Variables: x_uv for each edge (relaxed between 0 and 1), and p_v for each vertex v
     x = {}
     p = {}
-    M = len(graph.nodes())  # Large constant, typically the number of vertices
+    M = len(graph.nodes())  # Large constant, usually the number of vertices
 
-    # Decision variables for each edge (binary: 0 if removed, 1 if kept)
+    # Decision variables for each edge (continuous between 0 and 1)
     for u, v in graph.edges():
-        x[(u, v)] = model.addVar(vtype=GRB.BINARY, name=f"x_{u}_{v}")
-    print(f"add {(graph.number_of_edges())} edges")
+        x[(u, v)] = model.addVar(vtype=GRB.CONTINUOUS, lb=0, ub=1, name=f"x_{u}_{v}")
 
-    # Position variables for each vertex (continuous, representing topological position)
+    print("add x variable")
+    # Position variables for each vertex (continuous)
     for v in graph.nodes():
         p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
-    print(f"add {(graph.number_of_nodes())} nodes")
 
-    # Objective: minimize the total weight of removed edges
+    print("add p variable")
+    # Objective: minimize the total weight of edges removed
     model.setObjective(sum(graph[u][v]['weight'] * (1 - x[(u, v)]) for u, v in graph.edges()), GRB.MINIMIZE)
-    print(f"set objective")
 
-    # Constraints: Linear ordering constraints for cycle elimination (no cycles)
+    print("set objective")
+    # Constraints: Linear ordering constraints (relaxed for fractional x_uv)
     for u, v in graph.edges():
-        # If x_uv = 1 (edge is kept), then p_u must come before p_v
-        model.addConstr(p[u]+ 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
-    print(f"add {(graph.number_of_edges())} p constraints")
-
+        # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
+        model.addConstr(p[u] + 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
 
     if checkpoint_file:
         print(f"Loading checkpoint from {checkpoint_file}")
+        modul.update()
         model.read(checkpoint_file)
 
-        # Optimize the model
-        model.optimize()
 
     else:
 
@@ -214,15 +212,17 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
             for (u, v) in complete_removed_list:
                 if graph.has_edge(u,v):
                     x[(u, v)].start = 0  # Set initial value for the edge variable
-        # Optimize the model
-        model.optimize()
+    # Optimize the model
+    model.optimize()
 
-        # Save checkpoint if optimization is interrupted
-        if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
-            save_checkpoint(model, 'ip1checkpoint.mst')
+    # Save checkpoint if optimization is interrupted
+    if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
+            save_checkpoint(model, 'ip-lpcheckpoint.sol')
+
 
 
     print("after optimization")
+
 
     # Check if the optimization was successful
     removed_edges=[]
@@ -231,11 +231,12 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
 
         # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
         #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
-        removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].X < 0.5 )
-        for u, v in graph.edges():  
-            if x[(u, v)].X < 0.5 :
+        removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].X < 1-epsilon )
+        for u, v in graph.edges():
+            if x[(u, v)].X < 1-epsilon :
                 edge_flag[(u,v)]=0
                 removed_edges.append((u,v))
+                removed_weight+=graph[u][v]['weight']
         for (u,v) in removed_edges:
               graph.remove_edge(u,v)
 
@@ -243,9 +244,56 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
 
 
 
+def solve_fas_with_weighted_ip(graph,edge_flag):
+    # Initialize the Gurobi model
+    model = Model("FeedbackArcSet_Weighted_IP")
+    epsilon = 1e-6  # A small constant to enforce strict inequality
+ 
+    model.setParam('OutputFlag', 0)  # Silent mode
+    # Variables: x_uv for each edge (binary), and p_v for each vertex (position)
+    x = {}
+    p = {}
+    M = len(graph.nodes())  # Large constant, typically the number of vertices
+
+    # Decision variables for each edge (binary: 0 if removed, 1 if kept)
+    for u, v in graph.edges():
+        x[(u, v)] = model.addVar(vtype=GRB.BINARY, name=f"x_{u}_{v}")
+
+    # Position variables for each vertex (continuous, representing topological position)
+    for v in graph.nodes():
+        p[v] = model.addVar(vtype=GRB.CONTINUOUS,lb=0,ub=M-1, name=f"p_{v}")
+
+    # Objective: minimize the total weight of removed edges
+    model.setObjective(sum(graph[u][v]['weight'] * (1 - x[(u, v)]) for u, v in graph.edges()), GRB.MINIMIZE)
+
+    # Constraints: Linear ordering constraints for cycle elimination (no cycles)
+    for u, v in graph.edges():
+        # If x_uv = 1 (edge is kept), then p_u must come before p_v
+        model.addConstr(p[u]+ 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
+
+    # Optimize the model
+    model.optimize()
+
+    # Retrieve the final optimal removed edges (where x_uv = 0, meaning edge is removed)
+    #removed_edges = [(u, v) for u, v in graph.edges() if x[(u, v)].x < 0.5]
+    removed_weight = sum(graph[u][v]['weight']  for u, v in graph.edges()  if x[(u, v)].x < 0.5 )
+
+    for u, v in graph.edges() :
+        if x[(u, v)].X < 0.5:
+            edge_flag[(u,v)]=0
+    # Retrieve the linear ordering based on the positions of vertices (p_v)
+    #vertex_ordering = sorted(graph.nodes(), key=lambda v: p[v].x)
+
+    #up_bound = sum(graph[u][v]['weight'] * x[(u, v)] for u, v in graph.edges())
+
+    return removed_weight
 
 
-def process_graph(file_path,precondition):
+
+
+
+
+def process_graph(file_path,precondition,checkpoint_file=None):
     print(f"read data")
     node_list, edge_weights, in_edges, out_edges= build_ArrayDataStructure(file_path)
     G=build_from_EdgeList(edge_weights)
@@ -254,22 +302,24 @@ def process_graph(file_path,precondition):
     print(f"sum of weight={total}")
 
     edge_flag={(u,v):1 for (u,v) in edge_weights }
+    Init_flag=False
     if precondition==1:
         old_edge_flag=edge_flag.copy()
-        removed_weight=read_removed_edges("removed.csv",edge_flag )
+        if "test.csv" in file_path:
+            removed_weight=read_removed_edges("test_removed.csv",edge_flag )
+        else:
+            removed_weight=read_removed_edges("removed.csv",edge_flag )
         print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
         generate_complete_removed_list(edge_flag,edge_weights)
         print(f"length of the complete removed list is {len(complete_removed_list)}")
         edge_flag=old_edge_flag
-
+        Init_flag=True
 
     shG=G.copy()
 
-
+    removed_weight=0
     numcheckacyclic=0
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
-    addback_flag=False
-    removed_weight=0
     while not acyclic_flag :
         scc=list(nx.strongly_connected_components(shG))
         print(f"number of scc is {len(scc)}")
@@ -284,24 +334,29 @@ def process_graph(file_path,precondition):
             numcomponent+=1
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             G_sub = shG.subgraph(component).copy()
-
-            if 1==1:
+            if len(component)<100:
                 try:
-                     removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag,True,None)
-                     if removed_weight1==0:
-                         acyclic_flag=True
-                         removed_weight=0
-                         break
-                     else :
-                         if nx.is_directed_acyclic_graph(G_sub):
-                             print("the subgraph becomes acyclic graph")
-                         else:
-                             print("still has loop, wrong")
+                     removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag)
                      removed_weight+=removed_weight1
                      print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                     continue
                 except ValueError as e:
                      print(f"Caught an error  {e}")
-               
+            else:
+                try:
+                     removed_weight1=solve_fas_with_weighted_lp(G_sub,edge_flag,Init_flag,None)
+                     acyclic_flag= nx.is_directed_acyclic_graph(G_sub)
+                     if acyclic_flag:
+                             print("the subgraph becomes acyclic graph")
+                     else:
+                             print("still has loop after lp")
+                     removed_weight+=removed_weight1
+                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+
+                except ValueError as e:
+                     print(f"Caught an error  {e}")
+
+
 
         shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
         acyclic_flag=nx.is_directed_acyclic_graph(shG)
@@ -321,6 +376,13 @@ def process_graph(file_path,precondition):
             print(f"not acyclic graph")
 
 
+
 file_path = sys.argv[1]
-precondition=int(sys.argv[2])
-process_graph(file_path,precondition)
+precondition=False
+checkpoint=None
+if len(sys.argv)>2:
+    precondition=int(sys.argv[2])
+    if len(sys.argv)>3:
+        checkpoint=sys.argv[3]
+
+process_graph(file_path,precondition,checkpoint)
