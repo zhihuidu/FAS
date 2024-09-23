@@ -22,8 +22,8 @@ def process_gurobi_solution(file_path):
                 u = variable_parts[1]
                 v = variable_parts[2]
                 # Output the edge in the desired format: u, v, value
-                if int(value)==0:
-                    print(f'{u}, {v}, {value}')
+                if abs(float(value) -0.001) <0.1:
+                    print(f'{u}, {v}, 0')
 
 # Example usage
 file_path=sys.argv[1]

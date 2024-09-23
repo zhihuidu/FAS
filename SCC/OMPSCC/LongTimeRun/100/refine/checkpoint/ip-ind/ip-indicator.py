@@ -355,6 +355,7 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
     # Initialize the Gurobi model
     model = gp.Model("MaxWeightDirectedGraph")
     #model.setParam('OutputFlag', 0)  # Silent mode
+    model.setParam('Threads', 128)       # Use 128 threads
 
     model.setParam('TimeLimit', 172800)    # Set a time limit of cw6400*48 seconds
     '''

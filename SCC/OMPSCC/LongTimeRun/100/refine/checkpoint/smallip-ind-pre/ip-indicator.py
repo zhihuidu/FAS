@@ -350,11 +350,26 @@ def solve_indicator(graph,edge_flag):
     return removed_weight
 
 
+
+# Define a callback function
+def mycallback(model, where):
+    if where == GRB.Callback.MIPSOL:  # A new feasible solution is found
+        # Get the current solution
+        solution = model.cbGetSolution(model.getVars())
+
+        # Write the solution to a file
+        with open("feasible_solution.sol", "w") as f:
+            for v in model.getVars():
+                f.write(f"{v.varName} {model.cbGetSolution(v)}\n")
+        print("Feasible solution written to feasible_solution.sol")
+
 def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=None):
     global EarlyExit
     # Initialize the Gurobi model
     model = gp.Model("MaxWeightDirectedGraph")
     #model.setParam('OutputFlag', 0)  # Silent mode
+    #model.setParam('Threads', 64)
+
 
     model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
     '''
@@ -419,7 +434,7 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
 
 
     # Optimize the model
-    model.optimize()
+    model.optimize(mycallback)
 
     print(f"optimization")
 

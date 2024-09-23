@@ -274,7 +274,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
 
 
 
-def process_graph(file_path,precondition,checkpointfile):
+def process_graph(file_path,removed_edge_file='removed.csv'):
     global EarlyExit
     print(f"read data")
     node_list, edge_weights, in_edges, out_edges= build_ArrayDataStructure(file_path)
@@ -284,18 +284,7 @@ def process_graph(file_path,precondition,checkpointfile):
     print(f"sum of weight={total}")
 
     edge_flag={(u,v):1 for (u,v) in edge_weights }
-    Init_flag=False
-    if precondition==1:
-        old_edge_flag=edge_flag.copy()
-        if "test.csv" in file_path:
-            removed_weight=read_removed_edges("test_removed.csv",edge_flag )
-        else:
-            removed_weight=read_removed_edges("removed.csv",edge_flag )
-
-        print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
-        generate_complete_removed_list(edge_flag,edge_weights)
-        print(f"length of the complete removed list is {len(complete_removed_list)}")
-        Init_flag=True
+    removed_weight=read_removed_edges(removed_edge_file,edge_flag )
 
 
     shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
@@ -366,11 +355,7 @@ def process_graph(file_path,precondition,checkpointfile):
 
 
 file_path = sys.argv[1]
-precondition=False
-checkpoint=None
 if len(sys.argv)>2:
-    precondition=int(sys.argv[2])
-    if len(sys.argv)>3:
-        checkpoint=sys.argv[3]
+    removed_edge_file=sys.argv[2]
 
-process_graph(file_path,precondition,checkpoint)
+process_graph(file_path,removed_edge_file)

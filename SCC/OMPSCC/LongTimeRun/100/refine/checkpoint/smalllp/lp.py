@@ -132,8 +132,10 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
     # Set Gurobi license information using environment variables
 
     model = Model("FeedbackArcSet_Weighted_LP")
+    model.setParam('Threads', 128)
     
-    model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
+    
+    #model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of less than three days
     model.setParam('CKMUTIME', 50)  # Save checkpoint every 600 seconds (10 minutes)
@@ -174,6 +176,7 @@ def solve_fas_with_weighted_lp(graph,initial=False,checkpoint_file=None):
 
     if checkpoint_file:
         print(f"Loading checkpoint from {checkpoint_file}")
+        model.update()
         model.read(checkpoint_file)
 
     else:

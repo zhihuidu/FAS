@@ -24,7 +24,7 @@ os.environ['GRB_WLSSECRET'] = '37c29f28-6ae4-4a19-913d-6b8100964563'
 os.environ['GRB_LICENSEID'] = '2540055'
 
 # Optional: Disable the local license check by unsetting GRB_LICENSE_FILE
-os.environ.pop('GRB_LICENSE_FILE', None)
+#os.environ.pop('GRB_LICENSE_FILE', None)
 
 
 removed_list=[]
@@ -158,6 +158,8 @@ def save_checkpoint(model, filename):
 def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=None):
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_LP")
+    #model.setParam('Threads', 128)
+
 
     # Set parameters to prioritize speed over optimality
     #model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
