@@ -16,6 +16,8 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
+from pathlib import Path
+
 FileNameHead="ip"
 
 EarlyExit=False
@@ -158,31 +160,14 @@ def save_checkpoint(model, filename):
 
 
 
-# Define a callback function
-def mycallback(model, where):
-    if where == GRB.Callback.MIPSOL:  # A new feasible solution is found
-        # Get the current solution
-        solution = model.cbGetSolution(model.getVars())
-
-        # Write the solution to a file
-        with open("feasible_solution.sol", "w") as f:
-            for v in model.getVars():
-                f.write(f"{v.varName} {model.cbGetSolution(v)}\n")
-        print("Feasible solution written to feasible_solution.sol")
-
-
-
 def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=None):
     global EarlyExit
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
  
     #model.setParam('OutputFlag', 0)  # Silent mode
-    #model.setParam('Threads', 128)
-    
 
     model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
-
     #model.setParam('TimeLimit', 86400)    # Set a time limit of 3600*24 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
@@ -228,8 +213,21 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
         print(f"Update the model")
         model.update()
         print(f"Loading checkpoint from {checkpoint_file}")
-        model.read(checkpoint_file)
-
+        if Path("ipcheckpoint.sol").exists():
+            model.read('ipcheckpoint.sol')
+        model.update()
+        if Path("ipcheckpoint.mst").exists():
+            model.read('ipcheckpoint.mst')
+        model.update()
+        if Path("ipcheckpoint.hnt").exists():
+            model.read('ipcheckpoint.hnt')
+        model.update()
+        if Path("ipcheckpoint.ord").exists():
+            model.read('ipcheckpoint.ord')
+        model.update()
+        if Path("ipcheckpoint.attr").exists():
+            model.read('ipcheckpoint.attr')
+        model.update()
         print(f"Starting new optimization")
 
     else:
@@ -242,11 +240,18 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
                    x[(u, v)].start = 0  # Set initial value for the edge variable
 
     # Optimize the model
-    model.optimize(mycallback)
+    model.optimize()
     # Save checkpoint if optimization is interrupted
     if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
             print(f"write model")
+            model.update()
             model.write('ipcheckpoint.sol')
+            model.update()
+            model.write('ipcheckpoint.mst')
+            model.update()
+            model.write('ipcheckpoint.hnt')
+            model.update()
+            model.write('ipcheckpoint.attr')
             EarlyExit=True
             return 0
 
@@ -322,7 +327,7 @@ def process_graph(file_path,precondition,checkpointfile):
             print(f"{numcheckacyclic} check, handle the {numcomponent}th component with size {len(component)}")
             G_sub = shG.subgraph(component).copy()
 
-            if len(component)<1000 :
+            if len(component)<10 :
                 try:
                      removed_weight1=solve_fas_with_weighted_ip(G_sub,edge_flag,False,None)
                      removed_weight+=removed_weight1
@@ -368,7 +373,7 @@ def process_graph(file_path,precondition,checkpointfile):
 
 
 file_path = sys.argv[1]
-precondition=False
+precondition=0
 checkpoint=None
 if len(sys.argv)>2:
     precondition=int(sys.argv[2])

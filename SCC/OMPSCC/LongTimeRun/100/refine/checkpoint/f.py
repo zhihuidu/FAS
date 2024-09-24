@@ -490,7 +490,36 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
 
 
 
-def process_graph(file_path,precondition=0,checkpoint_file=None):
+def process_gurobi_solution(file_path,edge_flag):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    
+    # Iterate through each line and process variables
+    for line in lines:
+        # Split the line to get variable and value
+        parts = line.split()
+        
+        if len(parts) != 2:
+            continue  # Skip lines that don't have exactly 2 parts
+        
+        variable, value = parts[0], parts[1]
+        
+        # Check if the variable is an edge variable (starts with 'x')
+        if variable.startswith('x_'):
+            # Extract vertices u and v from the variable name
+            # Variable format is x_{u}_{v}, so we split by '_'
+            variable_parts = variable.split('_')
+            if len(variable_parts) == 3:
+                u = int(variable_parts[1])
+                v = int(variable_parts[2])
+                # Output the edge in the desired format: u, v, value
+                if abs(float(value) -0.001) <0.1:
+                    #print(f'{u}, {v}, 0')
+                    edge_flag[(u,v)]=0
+
+
+
+def process_graph(file_path,feasible_file):
     global EarlyExit
     print(f"read data")
     node_list, edge_weights, in_edges, out_edges= build_ArrayDataStructure(file_path)
@@ -502,23 +531,15 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
     edge_flag={(u,v):1 for (u,v) in edge_weights }
     Init_flag=False
     removed_weight=0
-    if precondition==1:
-        old_edge_flag=edge_flag.copy()
-        if "test.csv" in file_path:
-            removed_weight=read_removed_edges("test_removed.csv",edge_flag )
-        else :
-            removed_weight=read_removed_edges("removed.csv",edge_flag )
-        print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
-        generate_complete_removed_list(edge_flag,edge_weights)
-        print(f"length of the complete removed list is {len(complete_removed_list)}")
-        edge_flag=old_edge_flag
-        Init_flag=True
+    process_gurobi_solution(feasible_file,edge_flag)
 
-    removed_weight=0
+    for u,v in edge_flag:
+        if edge_flag[(u,v)]==0:
+           removed_weight+=edge_weights[(u,v)]
+    print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
 
 
-
-    shG=G.copy()
+    shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
 
 
     numcheckacyclic=0
@@ -562,7 +583,7 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
                      if EarlyExit:
                          return 0
                      removed_weight+=removed_weight1
-                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}\n")
+                     print(f"The {numcomponent}th component, removed weight is {removed_weight1}, totally removed {removed_weight}, percentage is {removed_weight/total*100}, remaining {total-removed_weight}\n")
                      acyclic_flag=nx.is_directed_acyclic_graph(G_sub)
                      if acyclic_flag :
                          print("no cycle")
@@ -577,6 +598,7 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
         shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
         acyclic_flag=nx.is_directed_acyclic_graph(shG)
 
+    print(f"Totally removed {removed_weight}, percentage is {removed_weight/total*100}, remaining {total-removed_weight}\n")
     print(f"relabel dag")
     shG=build_from_EdgeAndFlag(edge_weights,edge_flag)
     acyclic_flag=nx.is_directed_acyclic_graph(shG)
@@ -592,12 +614,7 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
 
 
 file_path = sys.argv[1]
-precondition=False
-checkpoint=None
-if len(sys.argv)>2:
-    precondition=int(sys.argv[2])
-    if len(sys.argv)>3:
-        checkpoint=sys.argv[3]
+feasible_file=sys.argv[2]
 
-process_graph(file_path,precondition,checkpoint)
+process_graph(file_path,feasible_file)
 

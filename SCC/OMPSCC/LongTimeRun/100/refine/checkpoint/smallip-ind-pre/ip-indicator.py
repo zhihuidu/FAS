@@ -15,6 +15,7 @@ from itertools import permutations
 import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 FileNameHead="ip-indicator"
 
@@ -242,7 +243,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag):
     model = Model("FeedbackArcSet_Weighted_IP")
     epsilon = 1e-6  # A small constant to enforce strict inequality
  
-    model.setParam('OutputFlag', 0)  # Silent mode
+    #model.setParam('OutputFlag', 0)  # Silent mode
     # Variables: x_uv for each edge (binary), and p_v for each vertex (position)
     x = {}
     p = {}
@@ -350,7 +351,6 @@ def solve_indicator(graph,edge_flag):
     return removed_weight
 
 
-
 # Define a callback function
 def mycallback(model, where):
     if where == GRB.Callback.MIPSOL:  # A new feasible solution is found
@@ -358,20 +358,24 @@ def mycallback(model, where):
         solution = model.cbGetSolution(model.getVars())
 
         # Write the solution to a file
+        os.system('cp -f feasible_solution.sol old_feasible_solution.sol')
+        os.system('rm -f feasible_solution.sol')
+
         with open("feasible_solution.sol", "w") as f:
             for v in model.getVars():
                 f.write(f"{v.varName} {model.cbGetSolution(v)}\n")
         print("Feasible solution written to feasible_solution.sol")
 
+
 def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=None):
     global EarlyExit
     # Initialize the Gurobi model
     model = gp.Model("MaxWeightDirectedGraph")
-    #model.setParam('OutputFlag', 0)  # Silent mode
     #model.setParam('Threads', 64)
 
+    #model.setParam('OutputFlag', 0)  # Silent mode
 
-    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
+    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*48 seconds
     '''
     # Set parameters to prioritize speed over optimality
     model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
@@ -420,7 +424,21 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
         print(f"Update the model")
         model.update()
         print(f"Loading checkpoint from {checkpoint_file}")
-        model.read(checkpoint_file)
+        if Path("ip-indcheckpoint.sol").exists():
+            model.read('ip-indcheckpoint.sol')
+        model.update()
+        if Path("ip-indcheckpoint.mst").exists():
+            model.read('ip-indcheckpoint.mst')
+        model.update()
+        if Path("ip-indcheckpoint.hnt").exists():
+            model.read('ip-indcheckpoint.hnt')
+        model.update()
+        if Path("ip-indcheckpoint.ord").exists():
+            model.read('ip-indcheckpoint.ord')
+        model.update()
+        if Path("ip-indcheckpoint.attr").exists():
+            model.read('ip-indcheckpoint.attr')
+        model.update()
         print(f"Starting new optimization")
 
     else:
@@ -442,7 +460,14 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
     # Save checkpoint if optimization is interrupted
     if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
             print(f"write model")
+            model.update()
             model.write('ip-indcheckpoint.sol')
+            model.update()
+            model.write('ip-indcheckpoint.mst')
+            model.update()
+            model.write('ip-indcheckpoint.hnt')
+            model.update()
+            model.write('ip-indcheckpoint.attr')
             EarlyExit=True
             return 0
 
@@ -567,7 +592,7 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
 
 
 file_path = sys.argv[1]
-precondition=0
+precondition=False
 checkpoint=None
 if len(sys.argv)>2:
     precondition=int(sys.argv[2])

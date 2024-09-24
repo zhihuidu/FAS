@@ -16,6 +16,8 @@ import numpy as np
 from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
+from pathlib import Path
+
 FileNameHead="ip"
 
 EarlyExit=False
@@ -211,8 +213,21 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
         print(f"Update the model")
         model.update()
         print(f"Loading checkpoint from {checkpoint_file}")
-        model.read(checkpoint_file)
-
+        if Path("ipcheckpoint.sol").exists():
+            model.read('ipcheckpoint.sol')
+        model.update()
+        if Path("ipcheckpoint.mst").exists():
+            model.read('ipcheckpoint.mst')
+        model.update()
+        if Path("ipcheckpoint.hnt").exists():
+            model.read('ipcheckpoint.hnt')
+        model.update()
+        if Path("ipcheckpoint.ord").exists():
+            model.read('ipcheckpoint.ord')
+        model.update()
+        if Path("ipcheckpoint.attr").exists():
+            model.read('ipcheckpoint.attr')
+        model.update()
         print(f"Starting new optimization")
 
     else:
@@ -229,7 +244,14 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
     # Save checkpoint if optimization is interrupted
     if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
             print(f"write model")
+            model.update()
             model.write('ipcheckpoint.sol')
+            model.update()
+            model.write('ipcheckpoint.mst')
+            model.update()
+            model.write('ipcheckpoint.hnt')
+            model.update()
+            model.write('ipcheckpoint.attr')
             EarlyExit=True
             return 0
 
