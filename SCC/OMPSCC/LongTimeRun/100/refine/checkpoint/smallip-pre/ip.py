@@ -158,6 +158,21 @@ def save_checkpoint(model, filename):
     # Save the current solution to a .mst file
     model.write(filename)
 
+# Define a callback function
+def mycallback(model, where):
+    if where == GRB.Callback.MIPSOL:  # A new feasible solution is found
+        # Get the current solution
+        solution = model.cbGetSolution(model.getVars())
+
+        # Write the solution to a file
+        os.system('cp -f feasible_solution.sol old_feasible_solution.sol')
+        os.system('rm -f feasible_solution.sol')
+
+        with open("feasible_solution.sol", "w") as f:
+            for v in model.getVars():
+                f.write(f"{v.varName} {model.cbGetSolution(v)}\n")
+        print("Feasible solution written to feasible_solution.sol")
+
 
 
 def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=None):
@@ -165,9 +180,16 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_IP")
  
-    #model.setParam('OutputFlag', 0)  # Silent mode
 
-    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
+    model.setParam('Heuristics', 0.4)  # 30% of the time spent on heuristics
+    model.setParam('CutAggPasses', 3)  # More aggressive cutting
+    model.setParam('Cuts', 2)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('BarConvTol', 1e-6)  # More aggressive convergence tolerance
+    model.setParam('AggFill', 2)
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+ 
+    model.setParam('Method', 3)
+    model.setParam('TimeLimit', 250000)    # Set a time limit of 3600*24 seconds
     #model.setParam('TimeLimit', 86400)    # Set a time limit of 3600*24 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
@@ -240,7 +262,7 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
                    x[(u, v)].start = 0  # Set initial value for the edge variable
 
     # Optimize the model
-    model.optimize()
+    model.optimize(mycallback)
     # Save checkpoint if optimization is interrupted
     if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
             print(f"write model")

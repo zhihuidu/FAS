@@ -370,13 +370,27 @@ def mycallback(model, where):
 def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=None):
     global EarlyExit
     # Initialize the Gurobi model
-    model = gp.Model("MaxWeightDirectedGraph")
+    model = gp.Model("MinWeightDirectedGraph")
     #model.setParam('Threads', 64)
 
-    #model.setParam('OutputFlag', 0)  # Silent mode
+    model.setParam('Heuristics', 0.5)  # 30% of the time spent on heuristics
+    model.setParam('CutAggPasses', 3)  # More aggressive cutting
 
-    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*48 seconds
+    #model.setParam('OutputFlag', 0)  # Silent mode
+    model.setParam('Cuts', 2)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('BarConvTol', 1e-4)  # More aggressive convergence tolerance
+    model.setParam('AggFill', 2)
+
+
+    model.setParam('MIPFocus', 3)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+    #model.setParam('Threads', 64)
+    model.setParam('Method', 3)
+    model.setParam('MIPGap', 0.2)      # Allow a 10% optimality gap
+    model.setParam('TimeLimit', 64800)    # Set a time limit of 3600*48 seconds
     '''
+    model.setParam('Heuristics', 0.3)  # 30% of the time spent on heuristics
+    
     # Set parameters to prioritize speed over optimality
     model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
     #model.setParam('TimeLimit', 7200)    # Set a time limit of 30 seconds

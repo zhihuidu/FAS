@@ -167,8 +167,17 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
  
     #model.setParam('OutputFlag', 0)  # Silent mode
 
-    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
-    #model.setParam('TimeLimit', 86400)    # Set a time limit of 3600*24 seconds
+    model.setParam('Heuristics', 0.5)  # 30% of the time spent on heuristics
+    model.setParam('CutAggPasses', 3)  # More aggressive cutting
+    model.setParam('Cuts', 2)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('BarConvTol', 1e-4)  # More aggressive convergence tolerance
+    #model.setParam('BarConvTol', 1e-6)  # More aggressive convergence tolerance
+    model.setParam('AggFill', 2)
+    model.setParam('MIPFocus', 2)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+    #model.setParam('Threads', 64)
+
+    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*48 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
