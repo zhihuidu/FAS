@@ -191,7 +191,6 @@ def solve_fas_with_weighted_ip(graph,edge_flag,initial=False,checkpoint_file=Non
     model.setParam('Threads', 64)
     model.setParam('Method', 3)
     model.setParam('MIPGap', 0.1)      # Allow a 10% optimality gap
-    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*48 seconds
     #model.setParam('TimeLimit', 86400)    # Set a time limit of 3600*24 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds

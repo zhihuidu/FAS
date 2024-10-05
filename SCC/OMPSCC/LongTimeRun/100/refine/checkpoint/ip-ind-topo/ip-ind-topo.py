@@ -32,7 +32,7 @@ os.environ['GRB_LICENSEID'] = '2540055'
 
 removed_list=[]
 complete_removed_list=[]
-
+id_mapping={}
 
 def generate_complete_removed_list(edge_flag,edge_weights):
     addnum=0
@@ -369,6 +369,7 @@ def mycallback(model, where):
 
 def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=None):
     global EarlyExit
+    global id_mapping
     # Initialize the Gurobi model
     model = gp.Model("MimWeightDirectedGraph")
     #model.setParam('Threads', 64)
@@ -460,6 +461,11 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
                 if graph.has_edge(u,v):
                     x[(u, v)].start = 0  # Set initial value for the edge variable
 
+            for v in graph.nodes():
+                 p[v].start = 0
+            for v in graph.nodes():
+                 p[v].start = id_mapping[v]
+
 
     # Optimize the model
     model.optimize(mycallback)
@@ -499,9 +505,18 @@ def solve_indicator_half_linear(graph,edge_flag,initial=False,checkpoint_file=No
     return removed_weight
 
 
+def read_ID_Mapping(file_path):
+    #df=pd.read_csv(file_path, header=None, names=['ID', 'Index'])
+    df=pd.read_csv(file_path)
+    data_table = df.values.tolist()
+    data_dict = {int(key): int(value) for key, value in data_table}
+    return data_dict
+
+
 
 def process_graph(file_path,precondition=0,checkpoint_file=None):
     global EarlyExit
+    global id_mapping
     print(f"read data")
     node_list, edge_weights, in_edges, out_edges= build_ArrayDataStructure(file_path)
     G=build_from_EdgeList(edge_weights)
@@ -514,10 +529,8 @@ def process_graph(file_path,precondition=0,checkpoint_file=None):
     removed_weight=0
     if precondition==1:
         old_edge_flag=edge_flag.copy()
-        if "test.csv" in file_path:
-            removed_weight=read_removed_edges("test_removed.csv",edge_flag )
-        else :
-            removed_weight=read_removed_edges("removed.csv",edge_flag )
+        id_mapping=read_ID_Mapping("best.csv")
+        removed_weight=read_removed_edges("removed.csv",edge_flag )
         print(f"to here removed weight is {removed_weight}, percentage is {removed_weight/total*100}")
         generate_complete_removed_list(edge_flag,edge_weights)
         print(f"length of the complete removed list is {len(complete_removed_list)}")

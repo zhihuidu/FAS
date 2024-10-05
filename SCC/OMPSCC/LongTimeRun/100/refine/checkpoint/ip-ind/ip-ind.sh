@@ -1,5 +1,5 @@
 #!/bin/bash -l
-#SBATCH --job-name=ip-indcheck
+#SBATCH --job-name=ip-inddmtcp
 #SBATCH --output=%x.%j.out # %x.%j expands to slurm JobName.JobID
 #SBATCH --error=%x.%j.err
 #SBATCH --partition=bigmem
@@ -14,7 +14,7 @@ echo "start time is"
 date
 start_time=$(date +%s)
 
-python -u ip-indicator.py ../../../../../../graph.csv 0 ip-indcheckpoint.sol
+dmtcp_launch --interval 850000 python -u ip-indicator.py ../../../../../../graph.csv 0 ip-indcheckpoint.sol
 
 end_time=$(date +%s)
 execution_time=$(( end_time - start_time ))
