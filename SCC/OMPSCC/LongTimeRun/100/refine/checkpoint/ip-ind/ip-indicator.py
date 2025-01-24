@@ -25,6 +25,7 @@ os.environ['GRB_WLSACCESSID'] = 'fb436391-3bb5-4b06-9a8c-66f0354b5011'
 os.environ['GRB_WLSSECRET'] = '37c29f28-6ae4-4a19-913d-6b8100964563'
 os.environ['GRB_LICENSEID'] = '2540055'
 
+os.environ['GRB_LICENSE_FILE'] = '/home/zhihui/.conda/pkgs/gurobi-11.0.3-py310_0/lib/gurobi.lic'
 # Optional: Disable the local license check by unsetting GRB_LICENSE_FILE
 #os.environ.pop('GRB_LICENSE_FILE', None)
 
