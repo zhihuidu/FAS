@@ -15,7 +15,7 @@ echo "start time is"
 date
 start_time=$(date +%s)
 
-python -u ip.py ../../../../../../graph.csv  0 ipcheckpoint.sol 
+python -u ip.py ../../../../../../graph.csv  1 
 
 end_time=$(date +%s)
 execution_time=$(( end_time - start_time ))

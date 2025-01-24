@@ -17,6 +17,7 @@ from sklearn.cluster import SpectralClustering
 import matplotlib.pyplot as plt
 
 FileNameHead="ip-lp"
+EarlyExit=False
 
 # Set Gurobi license information using environment variables
 os.environ['GRB_WLSACCESSID'] = 'fb436391-3bb5-4b06-9a8c-66f0354b5011'
@@ -154,15 +155,39 @@ def save_checkpoint(model, filename):
     # Save the current solution to a .mst file
     model.write(filename)
 
+# Define a callback function
+def mycallback(model, where):
+    if where == GRB.Callback.MIPSOL:  # A new feasible solution is found
+        # Get the current solution
+        solution = model.cbGetSolution(model.getVars())
+
+        # Write the solution to a file
+        os.system('cp -f feasible_solution.sol old_feasible_solution.sol')
+        os.system('rm -f feasible_solution.sol')
+
+        with open("feasible_solution.sol", "w") as f:
+            for v in model.getVars():
+                f.write(f"{v.varName} {model.cbGetSolution(v)}\n")
+        print("Feasible solution written to feasible_solution.sol")
+
 
 def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=None):
+    global EarlyExit
     # Initialize the Gurobi model
     model = Model("FeedbackArcSet_Weighted_LP")
     #model.setParam('Threads', 128)
 
 
     # Set parameters to prioritize speed over optimality
-    #model.setParam('OutputFlag', 0)    # Silent mode (turn off output)
+
+    #model.setParam('OutputFlag', 0)  # Silent mode
+    model.setParam('Cuts', 0)          # Moderate cut generation, larger cuts will be slow
+    model.setParam('Presolve', 2)      # Use aggressive presolve
+    model.setParam('Method', 3)
+    #model.setParam('Threads', 64)       # Use 8 threads
+    model.setParam('TimeLimit', 172800)    # Set a time limit of 3600*24 seconds
+    model.setParam('MIPFocus', 3)      # Focus on finding feasible solutions quickly,2 optimal,3 balance
+    #model.setParam('TimeLimit', 86400)    # Set a time limit of 3600*24 seconds
     '''
     model.setParam('TimeLimit', 216000)    # Set a time limit of 30 seconds
     # Set parameters to prioritize speed over optimality
@@ -174,7 +199,7 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=Non
     #model.setParam('Threads', 8)       # Use 8 threads
     model.setParam('SolutionLimit', 10)  # Stop after finding 10 feasible solutions
 '''
-
+    
     epsilon = 1e-6  # A small constant to enforce strict inequality
     # Variables: x_uv for each edge (relaxed between 0 and 1), and p_v for each vertex v
     x = {}
@@ -200,11 +225,29 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=Non
         # p_u < p_v if edge (u, v) is kept (x_uv close to 1)
         model.addConstr(p[u] + 1 <= p[v] + M * (1 - x[(u, v)]), f"order_{u}_{v}")
 
-    if checkpoint_file:
-        print(f"Loading checkpoint from {checkpoint_file}")
-        modul.update()
-        model.read(checkpoint_file)
 
+
+
+    if checkpoint_file != None:
+        print(f"Update the model")
+        model.update()
+        print(f"Loading checkpoint from {checkpoint_file}")
+        if Path("ip-lp.sol").exists():
+            model.read('ip-lp.sol')
+        model.update()
+        if Path("ip-lp.mst").exists():
+            model.read('ip-lp.mst')
+        model.update()
+        if Path("ip-lp.hnt").exists():
+            model.read('ip-lp.hnt')
+        model.update()
+        if Path("ip-lp.ord").exists():
+            model.read('ip-lp.ord')
+        model.update()
+        if Path("ip-lp.attr").exists():
+            model.read('ip-lp.attr')
+        model.update()
+        print(f"Starting new optimization")
 
     else:
 
@@ -213,16 +256,26 @@ def solve_fas_with_weighted_lp(graph,edge_flag,initial=False,checkpoint_file=Non
                 x[(u, v)].start = 1  # Set initial value for the edge variable
             for (u, v) in complete_removed_list:
                 if graph.has_edge(u,v):
-                    x[(u, v)].start = 0  # Set initial value for the edge variable
-    # Optimize the model
-    model.optimize()
+                   x[(u, v)].start = 0  # Set initial value for the edge variable
 
+
+    # Optimize the model
+    model.optimize(mycallback)
     # Save checkpoint if optimization is interrupted
     if model.status == GRB.INTERRUPTED or model.status == GRB.TIME_LIMIT:
-            save_checkpoint(model, 'ip-lpcheckpoint.sol')
+            print(f"write model")
+            model.update()
+            model.write('ip-lp.sol')
+            model.update()
+            model.write('ip-lp.mst')
+            model.update()
+            model.write('ip-lp.hnt')
+            model.update()
+            model.write('ip-lp.attr')
+            EarlyExit=True
+            return 0
 
-
-
+    
     print("after optimization")
 
 
@@ -347,6 +400,8 @@ def process_graph(file_path,precondition,checkpoint_file=None):
             else:
                 try:
                      removed_weight1=solve_fas_with_weighted_lp(G_sub,edge_flag,Init_flag,None)
+                     if EarlyExit:
+                         return 0
                      acyclic_flag= nx.is_directed_acyclic_graph(G_sub)
                      if acyclic_flag:
                              print("the subgraph becomes acyclic graph")

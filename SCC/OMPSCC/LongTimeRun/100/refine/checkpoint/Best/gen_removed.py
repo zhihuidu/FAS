@@ -22,12 +22,16 @@ removed_weight = 0
 with open("removed.csv", 'w') as f2:
     with open(sys.argv[2], 'r', encoding='utf-8') as f:
         csv_reader = csv.reader(f)
-        next(csv_reader)  # Skip header row
+        #next(csv_reader)  # Skip header row
         for row in csv_reader:
             source, target, weight = row
             all_edges_total += int(weight)
-            if node_id_to_index[source] < node_id_to_index[target]:
-                forward_edges_total += int(weight)
+            if source in node_id_to_index and target in node_id_to_index:
+                if node_id_to_index[source] < node_id_to_index[target]:
+                    forward_edges_total += int(weight)
+                else:
+                    f2.write(f"{source},{target},{weight}\n")
+                    removed_weight+=int(weight)
             else:
                 f2.write(f"{source},{target},{weight}\n")
                 removed_weight+=int(weight)
